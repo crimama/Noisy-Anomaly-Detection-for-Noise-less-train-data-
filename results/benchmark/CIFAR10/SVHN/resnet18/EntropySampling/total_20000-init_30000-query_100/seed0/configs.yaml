@@ -1,0 +1,51 @@
+DEFAULT:
+  seed: 0
+  savedir: ./results/benchmark
+  exp_name: EntropySampling
+DATASET:
+  datadir: /Volume/Data
+  batch_size: 256
+  test_batch_size: 2048
+  num_workers: 0
+  ID: CIFAR10
+  OOD: SVHN
+  anomaly_ratio: 0.1
+  aug_info: null
+  num_classes: 10
+  img_size: 32
+  mean:
+  - 0.4914
+  - 0.4822
+  - 0.4465
+  std:
+  - 0.247
+  - 0.2435
+  - 0.2616
+CRITERION:
+  name: NT_Xent
+  params:
+    temperature: 0.5
+OPTIMIZER:
+  opt_name: SGD
+  lr: 0.1
+TRAIN:
+  epochs: 50
+  grad_accum_steps: 1
+  mixed_precision: fp16
+  log_interval: 10
+  wandb:
+    use: false
+    entity: dsba-al-2023
+    project_name: Active Learning - Benchmark
+MODEL:
+  modelname: resnet18
+  pretrained: false
+  out_dim: 128
+AL:
+  n_start: 30000
+  n_query: 100
+  n_end: 20000
+  n_subset: null
+  init:
+    method: random_select
+  strategy: EntropySampling

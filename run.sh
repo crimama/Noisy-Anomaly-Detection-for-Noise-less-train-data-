@@ -1,0 +1,2 @@
+accelerate launch main.py --default_setting configs/benchmark/default_setting.yaml --strategy_setting configs/benchmark/entropy_sampling.yaml
+# python main.py --default_setting configs/benchmark/default_setting.yaml --strategy_setting configs/benchmark/entropy_sampling.yaml
