@@ -8,6 +8,8 @@ import numpy as np
 import pandas as pd
 
 import torch
+import torch.nn as nn 
+import torch.nn.functional as F 
 from torch.utils.data import DataLoader, SubsetRandomSampler
 from torch.distributed import get_rank
 from collections import OrderedDict
@@ -15,7 +17,7 @@ from accelerate import Accelerator
 
 from sklearn.metrics import roc_auc_score, f1_score, recall_score, precision_score, \
                             balanced_accuracy_score, classification_report, confusion_matrix, accuracy_score
-
+ 
 from query_strategies import create_query_strategy, create_labeled_index
 from models import ResNetSimCLR
 from utils import NoIndent, MyEncoder
@@ -51,12 +53,26 @@ def accuracy(outputs, targets, return_correct=False):
         return correct
     else:
         return correct/targets.size(0)
-
-
-def calc_metrics(y_true: list, y_score: np.ndarray, y_pred: list, return_per_class: bool = False) -> dict:
-    # softmax
-    y_score = torch.nn.functional.softmax(torch.FloatTensor(y_score), dim=1)
     
+def get_mse_score(outputs:list) -> torch.Tensor:
+    outputs_i = outputs[0]
+    outputs_j = outputs[1]
+    anomaly_score = torch.mean(torch.pow(outputs_i - outputs_j,2),1)
+    return anomaly_score 
+
+def get_kld_score(outputs:list):
+    input = F.log_softmax(outputs[0],dim=1)
+    target = F.softmax(outputs[1], dim=1)        
+    score = torch.Tensor([nn.KLDivLoss(reduction='batchmean')(input[i], target[i]) for i in range(len(input))])
+    return score 
+
+
+def calc_metrics(outputs:list) -> dict:
+    # Anomaly Score using mse 
+    mse_score = get_mse_score(outputs)
+    
+    # Anomaly Score using KLDivergence
+    kld_score = get_kld_score(outputs)
     # metrics
     auroc = roc_auc_score(y_true, y_score, average='macro', multi_class='ovr')
     f1 = f1_score(y_true, y_pred, average='macro')
@@ -105,15 +121,15 @@ def train(model, dataloader, criterion, optimizer, accelerator: Accelerator, log
     acc_m = AverageMeter()
     losses_m = AverageMeter()
     
-    total_preds = []
-    total_score = []
-    total_targets = []
+    mse_score_list = [] 
+    kld_score_list = [] 
+    true_labels = [] 
     
     end = time.time()
     
     model.train()
     optimizer.zero_grad()
-    for idx, (images, targets) in enumerate(dataloader):
+    for idx, (images, labels) in enumerate(dataloader):
         with accelerator.accumulate(model):
             data_time_m.update(time.time() - end)
             
@@ -129,87 +145,79 @@ def train(model, dataloader, criterion, optimizer, accelerator: Accelerator, log
             optimizer.zero_grad()
             losses_m.update(loss.item())            
             
+            # Stack score 
+            mse_score = get_mse_score(outputs)
+            kld_score = get_kld_score(outputs)
+            
+            mse_score_list.append(mse_score.detach().cpu().numpy())
+            kld_score_list.append(kld_score.detach().cpu().numpy())
+            true_labels.append(labels.detach().cpu().numpy())
+            
             # batch time
             batch_time_m.update(time.time() - end)
 
             if (idx+1) % accelerator.gradient_accumulation_steps == 0:
                 if ((idx+1) // accelerator.gradient_accumulation_steps) % log_interval == 0: 
-                    _logger.info(f'TRAIN [{(idx+1)//accelerator.gradient_accumulation_steps}/{len(dataloader)//accelerator.gradient_accumulation_steps}] Loss: {losses_m.val:>6.4f} ({losses_m.avg:>6.4f}) ')
+                    _logger.info('TRAIN [{:>4d}/{}] Loss: {loss.val:>6.4f} ({loss.avg:>6.4f}) '
+                                'LR: {lr:.3e} '
+                                'Time: {batch_time.val:.3f}s, {rate:>7.2f}/s ({batch_time.avg:.3f}s, {rate_avg:>7.2f}/s) '
+                                'Data: {data_time.val:.3f} ({data_time.avg:.3f})'.format(
+                                (idx+1)//accelerator.gradient_accumulation_steps, 
+                                len(dataloader)//accelerator.gradient_accumulation_steps, 
+                                loss       = losses_m, 
+                                lr         = optimizer.param_groups[0]['lr'],
+                                batch_time = batch_time_m,
+                                rate       = images[0].size(0) / batch_time_m.val,
+                                rate_avg   = images[0].size(0) / batch_time_m.avg,
+                                data_time  = data_time_m
+                                ))
+                    
     
             end = time.time()
     
     # calculate metrics
-    # metrics = calc_metrics(
-    #     y_true  = total_targets,
-    #     y_score = total_score,
-    #     y_pred  = total_preds
-    # )
+    mse_auroc = roc_auc_score(np.concatenate(true_labels), np.concatenate(mse_score_list))
+    kld_auroc = roc_auc_score(np.concatenate(true_labels), np.concatenate(kld_score_list))
     
-    # metrics.update([('acc',acc_m.avg), ('loss',losses_m.avg)])
     
     # # logging metrics
-    # _logger.info('\nTRAIN: Loss: %.3f | Acc: %.3f%% | BCR: %.3f%% | AUROC: %.3f%% | F1-Score: %.3f%% | Recall: %.3f%% | Precision: %.3f%%\n' % 
-    #              (metrics['loss'], 100.*metrics['acc'], 100.*metrics['bcr'], 100.*metrics['auroc'], 100.*metrics['f1'], 100.*metrics['recall'], 100.*metrics['precision']))
-    
-    # # classification report
-    # _logger.info(classification_report(y_true=total_targets, y_pred=total_preds, digits=4))
-    
-    # return metrics
-        
+    _logger.info('TRAIN: Loss: %.3f | MSE AUROC: %.3f%% | KLD AUROC: %.3f%% |' % (losses_m.avg, mse_auroc, kld_auroc))
+            
         
 def test(model, dataloader, criterion, log_interval: int, name: str = 'TEST', return_per_class: bool = False) -> dict:
-    correct = 0
-    total = 0
-    total_loss = 0
+    losses_m = AverageMeter()
     
-    total_preds = []
-    total_score = []
-    total_targets = []
+    mse_score_list = [] 
+    kld_score_list = [] 
+    true_labels = [] 
     
     model.eval()
     with torch.no_grad():
-        for idx, (images, targets) in enumerate(dataloader):
+        for idx, (images, labels) in enumerate(dataloader):
             # predict
             outputs = [model(image) for image in images]
             
             # loss 
             loss = criterion(outputs)
+            losses_m.update(loss.item())       
             
-            # # total loss and acc
-            # if isinstance(outputs, dict):
-            #     outputs = outputs['logits']
-            # total_loss += loss.item()
-            # correct += accuracy(outputs, targets, return_correct=True)
-            # total += targets.size(0)
+            # Stack score 
+            mse_score = get_mse_score(outputs)
+            kld_score = get_kld_score(outputs)
             
-            # # stack output
-            # total_preds.extend(outputs.argmax(dim=1).cpu().tolist())
-            # total_score.extend(outputs.cpu().tolist())
-            # total_targets.extend(targets.cpu().tolist())
+            mse_score_list.append(mse_score.detach().cpu().numpy())
+            kld_score_list.append(kld_score.detach().cpu().numpy())
+            true_labels.append(labels.detach().cpu().numpy())
             
-            # if (idx+1) % log_interval == 0: 
-            #     _logger.info('{0:s} [{1:d}/{2:d}]: Loss: {3:.3f} | Acc: {4:.3f}% [{5:d}/{6:d}]'.format(name, idx+1, len(dataloader), total_loss/(idx+1), 100.*correct/total, correct, total))
-    
     # calculate metrics
-    # metrics = calc_metrics(
-    #     y_true           = total_targets,
-    #     y_score          = total_score,
-    #     y_pred           = total_preds,
-    #     return_per_class = return_per_class
-    # )
+    mse_auroc = roc_auc_score(np.concatenate(true_labels), np.concatenate(mse_score_list))
+    kld_auroc = roc_auc_score(np.concatenate(true_labels), np.concatenate(kld_score_list))
     
-    # metrics.update([('acc',correct/total), ('loss',total_loss/len(dataloader))])
     
     # # logging metrics
-    # _logger.info('\n%s: Loss: %.3f | Acc: %.3f%% | BCR: %.3f%% | AUROC: %.3f%% | F1-Score: %.3f%% | Recall: %.3f%% | Precision: %.3f%%\n' % 
-    #              (name, metrics['loss'], 100.*metrics['acc'], 100.*metrics['bcr'], 100.*metrics['auroc'], 100.*metrics['f1'], 100.*metrics['recall'], 100.*metrics['precision']))
-    
-    # # classification report
-    # _logger.info(classification_report(y_true=total_targets, y_pred=total_preds, digits=4))
-    
-    # return metrics
+    _logger.info('TEST: Loss: %.3f | MSE AUROC: %.3f%% | KLD AUROC: %.3f%% |' % (losses_m.avg, mse_auroc, kld_auroc))
             
-                
+            
 def fit(
     model, trainloader, testloader, criterion, optimizer, scheduler, accelerator: Accelerator,
     epochs: int, use_wandb: bool, log_interval: int, seed: int = None, savedir: str = None, ckp_metric: str = None
@@ -217,6 +225,10 @@ def fit(
 
     step = 0
     best_score = 0
+    epoch_time_m = AverageMeter()
+    
+    end = time.time() 
+    
     for epoch in range(epochs):
         _logger.info(f'\nEpoch: {epoch+1}/{epochs}')
         train_metrics = train(
@@ -258,7 +270,9 @@ def fit(
         #         state.update(eval_metrics)
         #         json.dump(state, open(os.path.join(savedir, f'results_seed{seed}_best.json'), 'w'), indent='\t')
         #         torch.save(model.state_dict(), os.path.join(savedir, f'model_seed{seed}_best.pt'))
-    
+
+        epoch_time_m.update(time.time() - end)
+        end = time.time()
 
 def al_run(
     exp_name: str, modelname: str, pretrained: bool,
@@ -336,16 +350,15 @@ def al_run(
     )
     
     # run
-    #! nb_round 가 마이넉스가 나는 문제 해결 
     for r in range(nb_round+1):
-        
+        _logger.info(f'Round : [{r/nb_round+1}]')
         if r != 0:    
             # query sampling    
             query_idx = strategy.query(model, n_subset=n_subset)
             
 
             # clean memory
-            del model, optimizer, scheduler, trainloader, validloader, testloader
+            del model, optimizer, scheduler, trainloader
             accelerator.free_memory()
             
             # update query
@@ -394,12 +407,12 @@ def al_run(
         # if validset != testset:
         #     model.load_state_dict(torch.load(os.path.join(savedir, f'model_seed{seed}_best.pt')))
         
-        test_results = test(
-            model            = model, 
-            dataloader       = testloader, 
-            criterion        = strategy.loss_fn, 
-            log_interval     = log_interval,
-            return_per_class = True
-        )
+        # test_results = test(
+        #     model            = model, 
+        #     dataloader       = testloader, 
+        #     criterion        = criterion, 
+        #     log_interval     = log_interval,
+        #     return_per_class = True
+        # )
                 
         wandb.finish()
