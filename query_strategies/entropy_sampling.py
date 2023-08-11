@@ -7,7 +7,7 @@ from .strategy import Strategy
 class EntropySampling(Strategy):
     def __init__(
         self, model, n_query: int, labeled_idx: np.ndarray, 
-        dataset: Dataset, batch_size: int, num_workers: int):
+        dataset: Dataset, batch_size: int, num_workers: int, **kargs):
         
         super(EntropySampling, self).__init__(
             model       = model,
@@ -24,8 +24,8 @@ class EntropySampling(Strategy):
         probs = self.extract_unlabeled_prob(model=model, n_subset=n_subset)
         
         # unlabeled index
-        unlabeled_idx = np.where(self.labeled_idx==False)[0]
-        
+        unlabeled_idx = np.where(self.labeled_idx==True)[0]
+
         # select maximum entropy
         entropy = (-(probs*torch.log(probs))).sum(dim=1)
         select_idx = unlabeled_idx[entropy.sort(descending=True)[1][:self.n_query]]
