@@ -56,9 +56,9 @@ class Strategy:
     def extract_unlabeled_prob(self, model, n_subset: int = None) -> torch.Tensor:         
         
         # define sampler
-        unlabeled_idx = np.where(self.labeled_idx==False)[0]
+        labeled_idx = np.where(self.labeled_idx==True)[0]
         sampler = SubsetSequentialSampler(
-            indices = self.subset_sampling(indices=unlabeled_idx, n_subset=n_subset) if n_subset else unlabeled_idx
+            indices = self.subset_sampling(indices=labeled_idx, n_subset=n_subset) if n_subset else labeled_idx
         )
         
         # unlabeled dataloader
@@ -75,8 +75,10 @@ class Strategy:
         device = next(model.parameters()).device
         model.eval()
         with torch.no_grad():
-            for i, (inputs, _) in enumerate(dataloader):
-                outputs = model(inputs.to(device))
+            for i, ([images_i, images_j], _) in enumerate(dataloader):
+                outputs_i = model(images_i.to(device))
+                outputs_j = model(images_j.to(device))
+                outputs = (outputs_i + outputs_j) / 2 
                 outputs = torch.nn.functional.softmax(outputs, dim=1)
                 probs.append(outputs.cpu())
                 
