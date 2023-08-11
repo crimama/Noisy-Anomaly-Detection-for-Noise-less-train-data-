@@ -11,29 +11,28 @@ DATASET:
   anomaly_ratio: 0.1
   aug_info: null
 CRITERION:
-  name: NT_Xent
+  name: InfoNCE
   params:
     temperature: 0.5
 OPTIMIZER:
   opt_name: SGD
   lr: 0.1
 TRAIN:
-  epochs: 50
+  epochs: 30
   grad_accum_steps: 1
   mixed_precision: fp16
   log_interval: 10
   wandb:
     use: false
-    entity: dsba-al-2023
-    project_name: Active Learning - Benchmark
+    project_name: UAADF
 MODEL:
   modelname: resnet18
   pretrained: false
   out_dim: 128
 AL:
-  n_start: 30000
+  n_start: 10000
   n_query: 100
-  n_end: 20000
+  n_end: 5000
   n_subset: null
   init:
     method: random_select
