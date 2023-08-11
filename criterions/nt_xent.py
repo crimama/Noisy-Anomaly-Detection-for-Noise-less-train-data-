@@ -20,7 +20,8 @@ class NT_Xent(nn.Module):
         return mask
     
     def forward(self, z:list):
-        N = 2 * self.batch_size 
+        batch_size = z[0].shape[0]
+        N = 2 * batch_size 
         
         # z = [z_i, z_j]
         z = torch.cat(z, dim=0)
@@ -29,8 +30,8 @@ class NT_Xent(nn.Module):
         sim = F.cosine_similarity(z.unsqueeze(1), z.unsqueeze(0), dim=2) / self.temperature
         
         # Postivie / Negative pair 
-        sim_i_j = torch.diag(sim, self.batch_size)
-        sim_j_i = torch.diag(sim, -self.batch_size)
+        sim_i_j = torch.diag(sim, batch_size)
+        sim_j_i = torch.diag(sim, -batch_size)
         
         positive_samples = torch.cat((sim_i_j, sim_j_i), dim=0).reshape(N, 1)
         negative_samples = sim[self.mask].reshape(N, -1)
