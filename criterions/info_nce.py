@@ -4,9 +4,8 @@ import torch.nn.functional as F
 from info_nce import InfoNCE as _InfoNCE
 
 class InfoNCE(nn.Module):
-    def __init__(self, batch_size, temperature:float = 0.5):
+    def __init__(self, temperature:float = 0.5):
         super(InfoNCE, self).__init__()
-        self.batch_size = batch_size
         self.temperature = temperature
         self.criterion = _InfoNCE()
 

@@ -4,7 +4,7 @@ DEFAULT:
   exp_name: EntropySampling
 DATASET:
   datadir: /Volume/Data
-  batch_size: 256
+  batch_size: 1024
   test_batch_size: 2048
   num_workers: 0
   ID: CIFAR10
@@ -22,7 +22,7 @@ DATASET:
   - 0.2435
   - 0.2616
 CRITERION:
-  name: NT_Xent
+  name: InfoNCE
   params:
     temperature: 0.5
 OPTIMIZER:
@@ -35,8 +35,7 @@ TRAIN:
   log_interval: 10
   wandb:
     use: false
-    entity: dsba-al-2023
-    project_name: Active Learning - Benchmark
+    project_name: UAADF
 MODEL:
   modelname: resnet18
   pretrained: false

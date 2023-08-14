@@ -25,8 +25,17 @@ def test_augmentation(img_size: int, mean: tuple, std: tuple):
         transforms.Resize((img_size, img_size)),
         transforms.Normalize(mean, std),
     ])
-
+    
     return transform
+
+def gt_augmentation(img_size: int):
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Resize((img_size, img_size))
+    ])
+    return transform 
+    
+
 
 def get_color_jitter(s=1):
     color_jitter = transforms.ColorJitter(0.8 * s, 0.8 * s, 0.8 * s, 0.2 * s)

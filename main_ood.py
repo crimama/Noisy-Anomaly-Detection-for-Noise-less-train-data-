@@ -47,19 +47,21 @@ def run(cfg):
 
     # load dataset
     trainset, testset = create_dataset(
-        dataset_name    = cfg.DATASET.dataset_name,
+        normal_dataset  = cfg.DATASET.ID,
+        anomaly_dataset = cfg.DATASET.OOD,
         datadir         = cfg.DATASET.datadir,
         img_size        = cfg.DATASET.img_size,
         mean            = cfg.DATASET.mean,
         std             = cfg.DATASET.std,
         aug_info        = cfg.DATASET.aug_info,
         anomaly_ratio   = cfg.DATASET.anomaly_ratio,
-        **cfg.DATASET.get('params',{})
+        total_size      = cfg.AL.n_start
     )   
     
     # make save directory
-    al_name = f"init_{len(trainset)}-query_{cfg.AL.n_query}"
-    savedir = os.path.join(cfg.DEFAULT.savedir, cfg.DATASET.dataset_name, cfg.MODEL.method, cfg.MODEL.modelname, cfg.DEFAULT.exp_name, al_name, f'seed{cfg.DEFAULT.seed}')
+    al_name = f"total_{cfg.AL.n_end}-init_{cfg.AL.n_start}-query_{cfg.AL.n_query}"
+    savedir = os.path.join(cfg.DEFAULT.savedir, cfg.DATASET.ID, cfg.DATASET.OOD, cfg.MODEL.modelname, cfg.DEFAULT.exp_name, al_name, f'seed{cfg.DEFAULT.seed}')
+
     
     # assert not os.path.isdir(savedir), f'{savedir} already exists'
     os.makedirs(savedir, exist_ok=True)

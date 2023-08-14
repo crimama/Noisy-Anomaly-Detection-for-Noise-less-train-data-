@@ -860,3 +860,9 @@ def comparison_per_class(
     )
     plt.tight_layout()
     plt.show()
+    
+    
+def img_show(image):
+    import matplotlib.pyplot as plt 
+    plt.imshow(torch.permute(image,dims=(1,2,0)).detach().cpu().numpy())
+    plt.show()

@@ -54,61 +54,73 @@ def accuracy(outputs, targets, return_correct=False):
     else:
         return correct/targets.size(0)
     
-def get_mse_score(outputs:list) -> torch.Tensor:
-    outputs_i = outputs[0]
-    outputs_j = outputs[1]
-    anomaly_score = torch.mean(torch.pow(outputs_i - outputs_j,2),1)
-    return anomaly_score 
+# def get_mse_score(outputs:list) -> torch.Tensor:
+#     outputs_i = outputs[0]
+#     outputs_j = outputs[1]
+#     anomaly_score = torch.mean(torch.pow(outputs_i - outputs_j,2),1)
+#     return anomaly_score 
 
-def get_kld_score(outputs:list):
-    input = F.log_softmax(outputs[0],dim=1)
-    target = F.softmax(outputs[1], dim=1)        
-    score = torch.Tensor([nn.KLDivLoss(reduction='batchmean')(input[i], target[i]) for i in range(len(input))])
-    return score 
-
-
-def calc_metrics(outputs:list) -> dict:
-    # Anomaly Score using mse 
-    mse_score = get_mse_score(outputs)
+# def get_kld_score(outputs:list):
+#     input = F.log_softmax(outputs[0],dim=1)
+#     target = F.softmax(outputs[1], dim=1)        
+#     score = torch.Tensor([nn.KLDivLoss(reduction='batchmean')(input[i], target[i]) for i in range(len(input))])
+#     return score 
     
-    # Anomaly Score using KLDivergence
-    kld_score = get_kld_score(outputs)
-    # metrics
-    auroc = roc_auc_score(y_true, y_score, average='macro', multi_class='ovr')
-    f1 = f1_score(y_true, y_pred, average='macro')
-    recall = recall_score(y_true, y_pred, average='macro')
-    precision = precision_score(y_true, y_pred, average='macro')
-    bcr = balanced_accuracy_score(y_true, y_pred)
 
-    metrics = {
-        'auroc'     : auroc, 
-        'f1'        : f1, 
-        'recall'    : recall, 
-        'precision' : precision,
-        'bcr'       : bcr
-    }
+def get_score_map(t_outputs:list, s_outputs:list) -> torch.Tensor:
+    '''
+    sm.shape = (B,1,64,64)
+    '''
+    score_map = 1.
+    for t, s in zip(t_outputs, s_outputs):
+        t,s = F.normalize(t,dim=1),F.normalize(s,dim=1) # channel wise normalize 
+        sm = torch.sum((t - s) ** 2, 1, keepdim=True) # channel wise average 
+        sm = F.interpolate(sm, size=(64, 64), mode='bilinear', align_corners=False) # Intepolation : (1,w,h) -> (1,64,64)
+        score_map = score_map * sm 
+    return score_map 
 
-    if return_per_class:
-        # confusion matrix
-        cm = confusion_matrix(y_true, y_pred)
+# def calc_metrics(outputs:list) -> dict:
+#     # Anomaly Score using mse 
+#     mse_score = get_mse_score(outputs)
+    
+#     # Anomaly Score using KLDivergence
+#     kld_score = get_kld_score(outputs)
+#     # metrics
+#     auroc = roc_auc_score(y_true, y_score, average='macro', multi_class='ovr')
+#     f1 = f1_score(y_true, y_pred, average='macro')
+#     recall = recall_score(y_true, y_pred, average='macro')
+#     precision = precision_score(y_true, y_pred, average='macro')
+#     bcr = balanced_accuracy_score(y_true, y_pred)
+
+#     metrics = {
+#         'auroc'     : auroc, 
+#         'f1'        : f1, 
+#         'recall'    : recall, 
+#         'precision' : precision,
+#         'bcr'       : bcr
+#     }
+
+#     if return_per_class:
+#         # confusion matrix
+#         cm = confusion_matrix(y_true, y_pred)
         
-        # merics per class
-        f1_per_class = f1_score(y_true, y_pred, average=None)
-        recall_per_class = recall_score(y_true, y_pred, average=None)
-        precision_per_class = precision_score(y_true, y_pred, average=None)
-        acc_per_class = cm.diagonal() / cm.sum(axis=1)
+#         # merics per class
+#         f1_per_class = f1_score(y_true, y_pred, average=None)
+#         recall_per_class = recall_score(y_true, y_pred, average=None)
+#         precision_per_class = precision_score(y_true, y_pred, average=None)
+#         acc_per_class = cm.diagonal() / cm.sum(axis=1)
     
-        metrics.update({
-            'per_class':{
-                'cm': [NoIndent(elem) for elem in cm.tolist()],
-                'f1': f1_per_class.tolist(),
-                'recall': recall_per_class.tolist(),
-                'precision': precision_per_class.tolist(),
-                'acc': acc_per_class.tolist()
-            }
-        })
+#         metrics.update({
+#             'per_class':{
+#                 'cm': [NoIndent(elem) for elem in cm.tolist()],
+#                 'f1': f1_per_class.tolist(),
+#                 'recall': recall_per_class.tolist(),
+#                 'precision': precision_per_class.tolist(),
+#                 'acc': acc_per_class.tolist()
+#             }
+#         })
 
-    return metrics
+#     return metrics
 
 
 def train(model, dataloader, criterion, optimizer, accelerator: Accelerator, log_interval: int) -> dict:
@@ -121,9 +133,8 @@ def train(model, dataloader, criterion, optimizer, accelerator: Accelerator, log
     acc_m = AverageMeter()
     losses_m = AverageMeter()
     
-    mse_score_list = [] 
-    kld_score_list = [] 
     true_labels = [] 
+    score_list = [] 
     
     end = time.time()
     
@@ -134,10 +145,10 @@ def train(model, dataloader, criterion, optimizer, accelerator: Accelerator, log
             data_time_m.update(time.time() - end)
             
             # predict
-            outputs = [model(image) for image in images]
+            t_outputs, s_outputs = model(images)
 
             # calc loss
-            loss = criterion(outputs)
+            loss = criterion(t_outputs, s_outputs)
             accelerator.backward(loss)
 
             # loss update
@@ -145,13 +156,12 @@ def train(model, dataloader, criterion, optimizer, accelerator: Accelerator, log
             optimizer.zero_grad()
             losses_m.update(loss.item())            
             
-            # Stack score 
-            mse_score = get_mse_score(outputs)
-            kld_score = get_kld_score(outputs)
+            # get anomaly score 
+            score = get_score_map(t_outputs, s_outputs)
+            score = score.flatten(1).max(1)[0]
             
-            mse_score_list.append(mse_score.detach().cpu().numpy())
-            kld_score_list.append(kld_score.detach().cpu().numpy())
             true_labels.append(labels.detach().cpu().numpy())
+            score_list.append(score.detach().cpu().numpy())
             
             # batch time
             batch_time_m.update(time.time() - end)
@@ -174,14 +184,25 @@ def train(model, dataloader, criterion, optimizer, accelerator: Accelerator, log
                     
     
             end = time.time()
+            
     
     # calculate metrics
-    mse_auroc = roc_auc_score(np.concatenate(true_labels), np.concatenate(mse_score_list))
-    kld_auroc = roc_auc_score(np.concatenate(true_labels), np.concatenate(kld_score_list))
+    if true_labels[1].sum() != 0:
+        mse_auroc = roc_auc_score(np.concatenate(true_labels), np.concatenate(score_list))
+    else:
+        mse_auroc = 0 
+    
+    # logging metrics
+    _logger.info('TRAIN: Loss: %.3f | MSE AUROC: %.3f%%|' % (losses_m.avg, mse_auroc))
+    
+    train_result = {
+            'loss' : losses_m.avg
+            # 'mse_auroc' : mse_auroc,
+            # 'kld_auroc' : kld_auroc
+        }
+    return train_result 
     
     
-    # # logging metrics
-    _logger.info('TRAIN: Loss: %.3f | MSE AUROC: %.3f%% | KLD AUROC: %.3f%% |' % (losses_m.avg, mse_auroc, kld_auroc))
             
         
 def test(model, dataloader, criterion, log_interval: int, name: str = 'TEST', return_per_class: bool = False) -> dict:
@@ -193,29 +214,33 @@ def test(model, dataloader, criterion, log_interval: int, name: str = 'TEST', re
     
     model.eval()
     with torch.no_grad():
-        for idx, (images, labels) in enumerate(dataloader):
+        for idx, (images, labels, gts) in enumerate(dataloader):
             # predict
-            outputs = [model(image) for image in images]
+            t_outputs, s_outputs = model(images)
             
             # loss 
-            loss = criterion(outputs)
+            loss = criterion(t_outputs, s_outputs)
             losses_m.update(loss.item())       
             
             # Stack score 
-            mse_score = get_mse_score(outputs)
-            kld_score = get_kld_score(outputs)
+            score_map = get_score_map(t_outputs, s_outputs)
+            score_map = score_map.flatten(1).max(1)[0]
             
-            mse_score_list.append(mse_score.detach().cpu().numpy())
-            kld_score_list.append(kld_score.detach().cpu().numpy())
+            mse_score_list.append(score_map.detach().cpu().numpy())
             true_labels.append(labels.detach().cpu().numpy())
             
     # calculate metrics
     mse_auroc = roc_auc_score(np.concatenate(true_labels), np.concatenate(mse_score_list))
-    kld_auroc = roc_auc_score(np.concatenate(true_labels), np.concatenate(kld_score_list))
     
+    # logging metrics
+    _logger.info('TEST: Loss: %.3f | MSE AUROC: %.3f%% |' % (losses_m.avg, mse_auroc))
     
-    # # logging metrics
-    _logger.info('TEST: Loss: %.3f | MSE AUROC: %.3f%% | KLD AUROC: %.3f%% |' % (losses_m.avg, mse_auroc, kld_auroc))
+    test_result = {
+        'loss' : losses_m.avg,
+        # 'mse_auroc' : mse_auroc,
+        # 'kld_auroc' : kld_auroc
+    }
+    return test_result 
             
             
 def fit(
@@ -231,6 +256,7 @@ def fit(
     
     for epoch in range(epochs):
         _logger.info(f'\nEpoch: {epoch+1}/{epochs}')
+        
         train_metrics = train(
             model        = model, 
             dataloader   = trainloader, 
@@ -247,13 +273,21 @@ def fit(
             log_interval = log_interval,
             name         = 'VALID'
         )
-
-        # wandb
-        # if use_wandb:
-        #     metrics = OrderedDict(lr=optimizer.param_groups[0]['lr'])
-        #     metrics.update([('train_' + k, v) for k, v in train_metrics.items()])
-        #     metrics.update([('eval_' + k, v) for k, v in eval_metrics.items()])
-        #     wandb.log(metrics, step=step)
+        
+        epoch_time_m.update(time.time() - end)
+        end = time.time()
+        
+        # logging 
+        metrics = OrderedDict(epoch=epoch)
+        metrics.update([('lr',round(optimizer.param_groups[0]['lr'],5))])
+        metrics.update([('train_' + k, round(v,4)) for k, v in train_metrics.items()])
+        metrics.update([('eval_' + k, round(v,4)) for k, v in eval_metrics.items()])
+        metrics.update([('epoch time',round(epoch_time_m.val,4))])
+        
+        with open(os.path.join(savedir, 'log.txt'),  'a') as f:
+            f.write(json.dumps(metrics) + "\n")
+        if use_wandb:
+            wandb.log(metrics, step=step)
         
         step += 1
         
@@ -262,17 +296,17 @@ def fit(
             scheduler.step()
         
         # checkpoint - save best results and model weights
-        # if ckp_metric:
-        #     ckp_cond = (best_score > eval_metrics[ckp_metric]) if ckp_metric == 'loss' else (best_score < eval_metrics[ckp_metric])
-        #     if savedir and ckp_cond:
-        #         best_score = eval_metrics[ckp_metric]
-        #         state = {'best_step':step}
-        #         state.update(eval_metrics)
-        #         json.dump(state, open(os.path.join(savedir, f'results_seed{seed}_best.json'), 'w'), indent='\t')
-        #         torch.save(model.state_dict(), os.path.join(savedir, f'model_seed{seed}_best.pt'))
+        if ckp_metric:
+            ckp_cond = (best_score > eval_metrics[ckp_metric]) if ckp_metric == 'loss' else (best_score < eval_metrics[ckp_metric])
+            if savedir and ckp_cond:
+                best_score = eval_metrics[ckp_metric]
+                state = {'best_step':step}
+                state.update(eval_metrics)
+                json.dump(state, open(os.path.join(savedir, f'results_seed{seed}_best.json'), 'w'), indent='\t')
+                torch.save(model.state_dict(), os.path.join(savedir, f'model_seed{seed}_best.pt'))
+        
 
-        epoch_time_m.update(time.time() - end)
-        end = time.time()
+        
 
 def al_run(
     exp_name: str, modelname: str, pretrained: bool,
@@ -308,16 +342,13 @@ def al_run(
     )
     
     # create model 
-    model = ResNetSimCLR(
-                    modelname  = cfg.MODEL.modelname,
-                    img_size   = cfg.DATASET.img_size,
-                    pretrained = cfg.MODEL.pretrained,
-                    out_dim    = cfg.MODEL.out_dim
-                    )
+    model = __import__('models').__dict__[cfg.MODEL.method](
+        modelname = cfg.MODEL.modelname,
+        out_dim   = cfg.MODEL.out_dim
+        )
     
     # create criterion 
     criterion = __import__('criterions').__dict__[criterion_name](
-                    batch_size = batch_size,
                     **criterion_params
                     )
     
@@ -349,12 +380,20 @@ def al_run(
         num_workers = num_workers
     )
     
+    # query log 
+    query_log_df = pd.DataFrame({'idx': range(len(labeled_idx))})
+    query_log_df['query_round'] = None
+    query_log_df.loc[abs(labeled_idx.astype(np.int)-1).astype(bool), 'query_round'] = 'round0'
     # run
     for r in range(nb_round+1):
         _logger.info(f'Round : [{r/nb_round+1}]')
         if r != 0:    
             # query sampling    
             query_idx = strategy.query(model, n_subset=n_subset)
+            breakpoint()
+            # save query index 
+            query_log_df.loc[query_idx, 'query_round'] = f'round{r}'
+            query_log_df.to_csv(os.path.join(savedir, 'query_log.csv'), index=False)
             
 
             # clean memory
@@ -395,8 +434,8 @@ def al_run(
             epochs       = epochs, 
             use_wandb    = use_wandb,
             log_interval = log_interval,
-            savedir      = savedir if validset != testset else None,
-            seed         = seed if validset != testset else None,
+            savedir      = savedir ,
+            seed         = seed ,
             ckp_metric   = ckp_metric if validset != testset else None
         )
         

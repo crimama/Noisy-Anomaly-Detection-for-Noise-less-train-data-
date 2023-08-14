@@ -2,30 +2,32 @@ DEFAULT:
   seed: 0
   savedir: ./results/benchmark
 DATASET:
-  datadir: /Volume/Data
-  batch_size: 256
+  datadir: ../Data/MVtecAD
+  batch_size: 32
   test_batch_size: 2048
   num_workers: 0
-  ID: CIFAR10
-  OOD: SVHN
+  dataset_name: MVTecAD  # [AnomalyDataset,MVTecAD]
+  params:
+    class_name: hazelnut  
   anomaly_ratio: 0.1
   aug_info: null
 CRITERION:
-  name: InfoNCE
+  name: FeatDist
   params:
-    temperature: 0.5
+    layers: [0,1,2]
 OPTIMIZER:
   opt_name: SGD
-  lr: 0.1
+  lr: 0.01
 TRAIN:
   epochs: 30
   grad_accum_steps: 1
   mixed_precision: fp16
-  log_interval: 10
+  log_interval: 5
   wandb:
     use: false
     project_name: UAADF
 MODEL:
+  method : STPM
   modelname: resnet18
   pretrained: false
   out_dim: 128

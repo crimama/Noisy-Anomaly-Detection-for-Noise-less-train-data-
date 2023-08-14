@@ -132,3 +132,7 @@ log.txt*
 wandb/
 figure.ipynb
 *.pt
+/results 
+results/
+*.yaml
+.yaml

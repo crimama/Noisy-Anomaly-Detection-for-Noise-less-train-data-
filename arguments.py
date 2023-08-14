@@ -88,7 +88,11 @@ def parser():
             OmegaConf.update(cfg, k, convert_type(v), merge=True)
        
     # load dataset statistics
-    cfg.DATASET.update(stats.datasets[cfg.DATASET.ID])
+    if cfg.DATASET.dataset_name == 'AnomalyDataset':
+        data_name = cfg.DATASET.params.normal_dataset 
+    else: 
+        data_name = cfg.DATASET.params.class_name 
+    cfg.DATASET.update(stats.datasets[data_name])
     
     print(OmegaConf.to_yaml(cfg))
     
@@ -101,7 +105,11 @@ def jupyter_parser(default_setting:str=None, strategy_setting:str=None):
         cfg_task = OmegaConf.load(strategy_setting)
         cfg = OmegaConf.merge(cfg, cfg_task)
         
-    cfg.DATASET.update(stats.datasets[cfg.DATASET.ID])
+    if cfg.DATASET.dataset_name == 'AnomalyDataset':
+        data_name = cfg.DATASET.params.normal_dataset 
+    else: 
+        data_name = cfg.DATASET.params.class_name 
+    cfg.DATASET.update(stats.datasets[data_name])
     
     cfg = EasyDict(OmegaConf.to_container(cfg))
     return cfg  
