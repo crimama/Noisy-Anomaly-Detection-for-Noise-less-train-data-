@@ -51,7 +51,7 @@ def load_MVTecAD(datadir:str,
         gt_transform  = gt_augmentation(img_size = img_size),
         anomaly_ratio = anomaly_ratio,
         mode          = 'train',
-        gt            = False,
+        gt            = True,
         **kwargs
         
     )
