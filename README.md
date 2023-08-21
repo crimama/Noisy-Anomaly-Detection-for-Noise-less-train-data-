@@ -121,3 +121,9 @@ done
         - but 사용한 데이터 수가 적음
 - **일부 class 누락**
     - bash 파일에서 잘못해서 일부 class 누락 됨
+- Augmentation -> 학습 방해 
+- Loss Scale -> 각 Loss의 scale 확인 
+- 이 방법의 핵심은 Anomaly가 제외 되 나가는 것이기 떄문에 최종 round의 학습 데이터에서 Anomaly가 얼마나 남아 있는가
+- SimCLR 의 방법 -> SimCLR를 하는 과정에서 다른 AUgmentation이 된 두 input의 차이를 줄이는 것인데, 기존은 하나의 Augmentation 로 들어간 것을 최소화
+- Active Learning 보다는 Data Refinement에 가깝
+- Early stopping 해서 round 중간에 멈춰도 되지 않을까
