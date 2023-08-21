@@ -55,11 +55,22 @@ def run(cfg):
         aug_info        = cfg.DATASET.aug_info,
         anomaly_ratio   = cfg.DATASET.anomaly_ratio,
         **cfg.DATASET.get('params',{})
-    )   
+    )
     
     # make save directory
-    al_name = f"init_{len(trainset)}-query_{cfg.AL.n_query}"
-    savedir = os.path.join(cfg.DEFAULT.savedir, cfg.DATASET.dataset_name, cfg.MODEL.method, cfg.MODEL.modelname, cfg.DEFAULT.exp_name, al_name, f'seed{cfg.DEFAULT.seed}')
+    if cfg.DATASET.dataset_name == 'MVTecAD':
+        al_name = f"al_ratio_{cfg.DATASET.anomaly_ratio}-query_{cfg.AL.n_query}"
+        savedir = os.path.join(cfg.DEFAULT.savedir, 
+                                cfg.DATASET.dataset_name,           # resnet18 
+                                cfg.MODEL.method,                   # STPM 
+                                cfg.MODEL.modelname,                # resnet18
+                                cfg.DEFAULT.exp_name,               # EntropySampling 
+                                cfg.DATASET.params['class_name'],   # hazelnut 
+                                al_name
+                                )
+    else:
+        al_name = f"init_{len(trainset)}-query_{cfg.AL.n_query}"
+        savedir = os.path.join(cfg.DEFAULT.savedir, cfg.DATASET.dataset_name, cfg.MODEL.method, cfg.MODEL.modelname, cfg.DEFAULT.exp_name, al_name, f'seed{cfg.DEFAULT.seed}')
     
     # assert not os.path.isdir(savedir), f'{savedir} already exists'
     os.makedirs(savedir, exist_ok=True)
@@ -73,8 +84,7 @@ def run(cfg):
         modelname          = cfg.MODEL.modelname,
         pretrained         = cfg.MODEL.pretrained,
         strategy           = cfg.AL.strategy,
-        n_start            = cfg.AL.n_start,
-        n_end              = cfg.AL.n_end,
+        nb_round           = cfg.AL.n_round,
         n_query            = cfg.AL.n_query,
         n_subset           = cfg.AL.n_subset,
         init_method        = cfg.AL.init.method,
