@@ -4,19 +4,21 @@ DEFAULT:
 DATASET:
   datadir: ../Data/MVtecAD
   batch_size: 32
-  test_batch_size: 2048
-  num_workers: 0
+  test_batch_size: 64
+  num_workers: 8
   dataset_name: MVTecAD  # [AnomalyDataset,MVTecAD]
   params:
-    class_name: hazelnut  
+    class_name: bottle  
   anomaly_ratio: 0.1
   aug_info: null
 CRITERION:
-  name: FeatDist
+  name: MixLoss # [InfoNCE, FeatDist, MixLoss]
   params:
-    layers: [0,1,2]
+    layers: [0,1,2,3]
+    temperature: 0.5
+    alpha: 0.1
 OPTIMIZER:
-  opt_name: SGD
+  opt_name: AdamW
   lr: 0.01
 TRAIN:
   epochs: 30
@@ -24,7 +26,7 @@ TRAIN:
   mixed_precision: fp16
   log_interval: 5
   wandb:
-    use: false
+    use: true
     project_name: UAADF
 MODEL:
   method : STPM
@@ -32,9 +34,8 @@ MODEL:
   pretrained: false
   out_dim: 128
 AL:
-  n_start: 10000
-  n_query: 100
-  n_end: 5000
+  n_query: 10
+  n_round: 10
   n_subset: null
   init:
     method: random_select
