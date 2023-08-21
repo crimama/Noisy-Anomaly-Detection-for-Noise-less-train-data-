@@ -24,7 +24,7 @@ seaborn
 easydict 
 pyDantic
 ```
-## Run 
+# Run 
 ```bash
 anomaly_ratio='0 0.05 0.1 0.15'
 query_strategy='entropy_sampling random_sampling margin_sampling least_confidence'
