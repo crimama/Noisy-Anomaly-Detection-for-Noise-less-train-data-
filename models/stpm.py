@@ -3,20 +3,34 @@ import torch.nn as nn
 
 
 class STPM(nn.Module):
-    def __init__(self, modelname = 'resnet18', out_dim = 128):
+    def __init__(self, modelname = 'resnet18', out_dim:int = 128, contrastive:bool = False):
         super(STPM,self).__init__()
         
+    
         # create model 
-        self.teacher = timm.create_model(modelname,pretrained=True)
+        if contrastive:
+            self.teacher = timm.create_model(modelname,pretrained=True, num_classes = out_dim)
+        else:
+            self.teacher = timm.create_model(modelname,pretrained=True)
         self.student = timm.create_model(modelname,pretrained=False)
+        
+        # Change student linear for contrastive learning
+        if contrastive:
+            dim_mlp = self.student.fc.in_features
+            self.student.fc = nn.Sequential(
+                nn.Linear(dim_mlp, dim_mlp),
+                nn.ReLU(),
+                nn.Linear(dim_mlp,out_dim)
+            )
         
         # teacher required grad False  
         for p in self.teacher.parameters():
             p.requires_grad = False 
             
-    def forward(self, x):
-        t_outputs = [] 
-        s_outputs = [] 
+            
+    def forward(self, x) -> list:
+        t_features = [] 
+        s_features = [] 
         
         x_s = x.clone()
         x_t = x.clone() 
@@ -25,11 +39,15 @@ class STPM(nn.Module):
             x_s = s_module(x_s)
             
             if t_name in ['layer1','layer2','layer3','layer4']:
-                t_outputs.append(x_t)
-                s_outputs.append(x_s)
+                t_features.append(x_t)
+                s_features.append(x_s)
                 
-        return t_outputs, s_outputs 
-            
+                
+        return [t_features, s_features, x_t, x_s]
+    
+    def forward_logit(self, x):
+        return self.student(x)
+    
             
             
 # class SaveHook:
