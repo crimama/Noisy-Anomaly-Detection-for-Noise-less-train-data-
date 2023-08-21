@@ -24,7 +24,29 @@ seaborn
 easydict 
 pyDantic
 ```
+## Run 
+```bash
+anomaly_ratio='0 0.05 0.1 0.15'
+query_strategy='entropy_sampling random_sampling margin_sampling least_confidence'
+class_name='leather zipper metal_nut wood pill grid tile capsule hazelnut toothbrush screw carpet bottle cable all'
 
+for q in $query_strategy
+do
+    for r in $anomaly_ratio
+    do
+        for c in $class_name
+        do
+            echo "query_strategy: $q, anomaly_ratio: $r, class_name: $c"
+            python main.py --default_setting configs/benchmark/default_setting.yaml \
+                        --strategy_setting configs/benchmark/$q.yaml \
+                        DATASET.anomaly_ratio $r \
+                        DATASET.params.class_name $c
+        done
+    done
+done
+
+
+```
 
 # Methods
 - 전체 데이터(Normal + Anomaly)로 Anomaly Detection 모델을 학습하며 Active Learning의 query strategy를 이용해 Uncertainty가 높은 데이터를 제외, 이를 반복하여 최종적으로 Normal data로만 Anomaly Detection 모델 학습 
@@ -80,29 +102,7 @@ pyDantic
 - ~~Random Sampling~~
 - Entropy Sampling
 
-## Run 
-```bash
-anomaly_ratio='0 0.05 0.1 0.15'
-query_strategy='entropy_sampling random_sampling margin_sampling least_confidence'
-class_name='leather zipper metal_nut wood pill grid tile capsule hazelnut toothbrush screw carpet bottle cable all'
 
-for q in $query_strategy
-do
-    for r in $anomaly_ratio
-    do
-        for c in $class_name
-        do
-            echo "query_strategy: $q, anomaly_ratio: $r, class_name: $c"
-            python main.py --default_setting configs/benchmark/default_setting.yaml \
-                        --strategy_setting configs/benchmark/$q.yaml \
-                        DATASET.anomaly_ratio $r \
-                        DATASET.params.class_name $c
-        done
-    done
-done
-
-
-```
 
 # Result 
 
@@ -121,3 +121,10 @@ done
         - but 사용한 데이터 수가 적음
 - **일부 class 누락**
     - bash 파일에서 잘못해서 일부 class 누락 됨
+
+# Future...? 
+- 우선 데이터셋부터 수정 
+- MVTecAD 데이터는 너무 작으니 다른 데이터셋 사용
+- 베이스 모델 고정부터 진행 
+- 그 외에 기존에 나온 모델들이 Fully Unsupervised 세팅으로 진행 했을 때 결과는? 
+- 기존 나온 모델들을 이 프레임워크에 붙이는 방법은 없을까? 
