@@ -127,3 +127,7 @@ done
 - SimCLR 의 방법 -> SimCLR를 하는 과정에서 다른 AUgmentation이 된 두 input의 차이를 줄이는 것인데, 기존은 하나의 Augmentation 로 들어간 것을 최소화
 - Active Learning 보다는 Data Refinement에 가깝
 - Early stopping 해서 round 중간에 멈춰도 되지 않을까
+- 하나의 카테고리만 사용하는 Task에서는 SimCLR는 오히려 안맞지 않을까?
+- fp16을 사용 했을 때 모델 성능에 영향을 끼치지는 않을까
+- resnet18 말고 이외의 방법
+
