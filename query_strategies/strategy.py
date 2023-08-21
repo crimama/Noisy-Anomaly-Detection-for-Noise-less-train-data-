@@ -75,10 +75,9 @@ class Strategy:
         device = next(model.parameters()).device
         model.eval()
         with torch.no_grad():
-            for i, ([images_i, images_j], _) in enumerate(dataloader):
-                outputs_i = model(images_i.to(device))
-                outputs_j = model(images_j.to(device))
-                outputs = (outputs_i + outputs_j) / 2 
+            for idx, data in enumerate(dataloader):
+                images = data[0]
+                outputs = model.forward_logit(images.to(device))
                 outputs = torch.nn.functional.softmax(outputs, dim=1)
                 probs.append(outputs.cpu())
                 
