@@ -23,7 +23,8 @@ class LeastConfidence(Strategy):
         probs = self.extract_unlabeled_prob(model=model, n_subset=n_subset)
         
         # unlabeled index
-        unlabeled_idx = np.where(self.labeled_idx==False)[0]
+        # unlabeled_idx = np.where(self.labeled_idx==False)[0]
+        unlabeled_idx = np.where(self.labeled_idx==True)[0]
         
         # select least confidence
         max_confidence = probs.max(1)[0]

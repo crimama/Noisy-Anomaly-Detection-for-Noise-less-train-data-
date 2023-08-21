@@ -23,7 +23,8 @@ class MarginSampling(Strategy):
         probs = self.extract_unlabeled_prob(model=model, n_subset=n_subset)
         
         # unlabeled index
-        unlabeled_idx = np.where(self.labeled_idx==False)[0]
+        # unlabeled_idx = np.where(self.labeled_idx==False)[0]
+        unlabeled_idx = np.where(self.labeled_idx==True)[0]
         
         # select margin between top two class probability
         sorted_desc_prob, _ = probs.sort(descending=True)

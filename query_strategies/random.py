@@ -20,7 +20,7 @@ class RandomSampling(Strategy):
     def query(self, model, n_subset: int = None) -> np.ndarray:
         
         # unlabeled index
-        unlabeled_idx = np.where(self.labeled_idx==False)[0]
+        unlabeled_idx = np.where(self.labeled_idx==True)[0]
         
         np.random.shuffle(unlabeled_idx)
         select_idx = unlabeled_idx[:self.n_query]
