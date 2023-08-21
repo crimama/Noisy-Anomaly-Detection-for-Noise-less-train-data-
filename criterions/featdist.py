@@ -8,7 +8,13 @@ class FeatDist(nn.Module):
         self.layers = layers 
         
         
-    def __call__(self, t_outputs, s_outputs):
+    def __call__(self, outputs):
+        '''
+        outputs = [t_features, s_features, x_t, x_s]
+        '''
+        t_outputs = outputs[0]
+        s_outputs = outputs[1]
+        
         t_outputs = [t_outputs[x] for x in self.layers]
         s_outputs = [s_outputs[x] for x in self.layers]
         
