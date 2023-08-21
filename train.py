@@ -12,16 +12,11 @@ import torch
 import torch.nn as nn 
 import torch.nn.functional as F 
 from torch.utils.data import DataLoader, SubsetRandomSampler
-from torch.distributed import get_rank
 from collections import OrderedDict
 from accelerate import Accelerator
 
-from sklearn.metrics import roc_auc_score, f1_score, recall_score, precision_score, \
-                            balanced_accuracy_score, classification_report, confusion_matrix, accuracy_score
- 
+from sklearn.metrics import roc_auc_score
 from query_strategies import create_query_strategy, create_labeled_index
-from models import ResNetSimCLR
-from utils import NoIndent, MyEncoder
 from omegaconf import OmegaConf
 
 
@@ -103,7 +98,6 @@ def train(model, dataloader, criterion, optimizer, accelerator: Accelerator, log
     '''   
     batch_time_m = AverageMeter()
     data_time_m = AverageMeter()
-    acc_m = AverageMeter()
     losses_m = AverageMeter()
     
     true_labels = [] 
@@ -186,9 +180,6 @@ def train(model, dataloader, criterion, optimizer, accelerator: Accelerator, log
         }
     return train_result 
     
-    
-            
-        
 def test(model, dataloader, criterion) -> dict:
     losses_m = AverageMeter()
     
@@ -378,6 +369,7 @@ def al_run(
     query_log_df = pd.DataFrame({'idx': range(len(labeled_idx))})
     query_log_df['query_round'] = None
     query_log_df.loc[abs(labeled_idx.astype(np.int)-1).astype(bool), 'query_round'] = 'round0'
+    
     # run
     for r in range(nb_round):
         _logger.info(f'\nRound : [{r}/{nb_round}]')
@@ -432,21 +424,6 @@ def al_run(
             savedir      = savedir ,
             seed         = seed ,
             ckp_metric   = ckp_metric if validset != testset else None
-        )
-        
-        # save model
-        # torch.save(model.state_dict(), os.path.join(savedir, f"model_seed{seed}.pt"))
-
-        # # load best checkpoint 
-        # if validset != testset:
-        #     model.load_state_dict(torch.load(os.path.join(savedir, f'model_seed{seed}_best.pt')))
-        
-        # test_results = test(
-        #     model            = model, 
-        #     dataloader       = testloader, 
-        #     criterion        = criterion, 
-        #     log_interval     = log_interval,
-        #     return_per_class = True
-        # )
+        )        
                 
         wandb.finish()
