@@ -6,6 +6,7 @@ import json
 
 import numpy as np
 import pandas as pd
+import cv2 
 
 import torch
 import torch.nn as nn 
@@ -44,33 +45,19 @@ class AverageMeter:
         self.avg = self.sum / self.count
 
 
-def accuracy(outputs, targets, return_correct=False):
-    # calculate accuracy
-    preds = outputs.argmax(dim=1) 
-    correct = targets.eq(preds).sum().item()
-    
-    if return_correct:
-        return correct
-    else:
-        return correct/targets.size(0)
-    
-# def get_mse_score(outputs:list) -> torch.Tensor:
-#     outputs_i = outputs[0]
-#     outputs_j = outputs[1]
-#     anomaly_score = torch.mean(torch.pow(outputs_i - outputs_j,2),1)
-#     return anomaly_score 
-
-# def get_kld_score(outputs:list):
-#     input = F.log_softmax(outputs[0],dim=1)
-#     target = F.softmax(outputs[1], dim=1)        
-#     score = torch.Tensor([nn.KLDivLoss(reduction='batchmean')(input[i], target[i]) for i in range(len(input))])
-#     return score 
+def get_kld_score(outputs:list):
+    input = F.log_softmax(outputs[2],dim=1)
+    target = F.softmax(outputs[3], dim=1)        
+    score = torch.Tensor([nn.KLDivLoss(reduction='batchmean')(input[i], target[i]) for i in range(len(input))])
+    return score 
     
 
-def get_score_map(t_outputs:list, s_outputs:list) -> torch.Tensor:
+def get_score_map(outputs) -> torch.Tensor:
     '''
+    outputs = [t_outputs, s_outputs, t_logit, s_logit]
     sm.shape = (B,1,64,64)
     '''
+    t_outputs, s_outputs = outputs[0], outputs[1]
     score_map = 1.
     for t, s in zip(t_outputs, s_outputs):
         t,s = F.normalize(t,dim=1),F.normalize(s,dim=1) # channel wise normalize 
@@ -79,48 +66,34 @@ def get_score_map(t_outputs:list, s_outputs:list) -> torch.Tensor:
         score_map = score_map * sm 
     return score_map 
 
-# def calc_metrics(outputs:list) -> dict:
-#     # Anomaly Score using mse 
-#     mse_score = get_mse_score(outputs)
+def cal_metrics(true_labels:np.ndarray, score_maps:np.ndarray, gts=None):
+    # Image Level AUROC 
+    if true_labels.sum() != 0:
+        size = score_maps.shape[0]
+        image_level_score = score_maps.reshape(size,-1).max(1)
+        image_auroc = roc_auc_score(true_labels, image_level_score)
+    else:
+        image_auroc = 0 
+
+    # Pixel Level AUROC 
+    if gts is not None:
+        if true_labels.sum() != 0:
+            # preprocess score for pixel 
+            pixel_score = np.transpose(score_maps,(0,2,3,1))
+            pixel_score = np.array([np.expand_dims(cv2.resize(score, dsize=(224,224)), axis=2) for score in pixel_score])
+            
+            # preprocess gt for pixel 
+            gts = np.transpose(gts, (0,2,3,1))
+            gts = np.array([cv2.cvtColor(gt, cv2.COLOR_BGR2GRAY) for gt in gts])
+            
+            # cal pixel auroc score 
+            pixel_auroc = roc_auc_score(gts.flatten(), pixel_score.flatten())
+        else:
+            pixel_auroc = 0 
+    else:
+        pixel_auroc = 0
     
-#     # Anomaly Score using KLDivergence
-#     kld_score = get_kld_score(outputs)
-#     # metrics
-#     auroc = roc_auc_score(y_true, y_score, average='macro', multi_class='ovr')
-#     f1 = f1_score(y_true, y_pred, average='macro')
-#     recall = recall_score(y_true, y_pred, average='macro')
-#     precision = precision_score(y_true, y_pred, average='macro')
-#     bcr = balanced_accuracy_score(y_true, y_pred)
-
-#     metrics = {
-#         'auroc'     : auroc, 
-#         'f1'        : f1, 
-#         'recall'    : recall, 
-#         'precision' : precision,
-#         'bcr'       : bcr
-#     }
-
-#     if return_per_class:
-#         # confusion matrix
-#         cm = confusion_matrix(y_true, y_pred)
-        
-#         # merics per class
-#         f1_per_class = f1_score(y_true, y_pred, average=None)
-#         recall_per_class = recall_score(y_true, y_pred, average=None)
-#         precision_per_class = precision_score(y_true, y_pred, average=None)
-#         acc_per_class = cm.diagonal() / cm.sum(axis=1)
-    
-#         metrics.update({
-#             'per_class':{
-#                 'cm': [NoIndent(elem) for elem in cm.tolist()],
-#                 'f1': f1_per_class.tolist(),
-#                 'recall': recall_per_class.tolist(),
-#                 'precision': precision_per_class.tolist(),
-#                 'acc': acc_per_class.tolist()
-#             }
-#         })
-
-#     return metrics
+    return image_auroc, pixel_auroc
 
 
 def train(model, dataloader, criterion, optimizer, accelerator: Accelerator, log_interval: int) -> dict:
@@ -135,20 +108,22 @@ def train(model, dataloader, criterion, optimizer, accelerator: Accelerator, log
     
     true_labels = [] 
     score_list = [] 
+    kld_score_list = []
+    true_gts = []
     
     end = time.time()
     
     model.train()
     optimizer.zero_grad()
-    for idx, (images, labels) in enumerate(dataloader):
+    for idx, (images, labels, gts) in enumerate(dataloader):
         with accelerator.accumulate(model):
             data_time_m.update(time.time() - end)
             
             # predict
-            t_outputs, s_outputs = model(images)
+            outputs = model(images)
 
             # calc loss
-            loss = criterion(t_outputs, s_outputs)
+            loss = criterion(outputs)
             accelerator.backward(loss)
 
             # loss update
@@ -157,11 +132,13 @@ def train(model, dataloader, criterion, optimizer, accelerator: Accelerator, log
             losses_m.update(loss.item())            
             
             # get anomaly score 
-            score = get_score_map(t_outputs, s_outputs)
-            score = score.flatten(1).max(1)[0]
+            score = get_score_map(outputs)
+            kld_score = get_kld_score(outputs)
             
             true_labels.append(labels.detach().cpu().numpy())
             score_list.append(score.detach().cpu().numpy())
+            kld_score_list.append(kld_score.detach().cpu().numpy())
+            true_gts.append(gts.detach().cpu().numpy())
             
             # batch time
             batch_time_m.update(time.time() - end)
@@ -187,65 +164,87 @@ def train(model, dataloader, criterion, optimizer, accelerator: Accelerator, log
             
     
     # calculate metrics
-    if true_labels[1].sum() != 0:
-        mse_auroc = roc_auc_score(np.concatenate(true_labels), np.concatenate(score_list))
-    else:
-        mse_auroc = 0 
+    image_auroc, pixel_auroc = cal_metrics(
+        true_labels = np.concatenate(true_labels),
+        score_maps  = np.concatenate(score_list),
+        gts         = np.concatenate(true_gts)
+        )
     
+    if np.concatenate(true_labels).sum() != 0:
+        kld_auroc = roc_auc_score(np.concatenate(true_labels), np.concatenate(kld_score_list))
+    else:
+        kld_auroc = 0 
+        
     # logging metrics
-    _logger.info('TRAIN: Loss: %.3f | MSE AUROC: %.3f%%|' % (losses_m.avg, mse_auroc))
+    _logger.info('TRAIN: Loss: %.3f | Image AUROC: %.3f%%| Pixel AUROC: %.3f%% | KLD AUROC: %.3f%%' % (losses_m.avg, image_auroc, pixel_auroc, kld_auroc))
     
     train_result = {
-            'loss' : losses_m.avg
-            # 'mse_auroc' : mse_auroc,
-            # 'kld_auroc' : kld_auroc
+            'loss' : losses_m.avg,
+            'image_auroc' : image_auroc,
+            'pixel_auroc' : pixel_auroc,
+            'kld_auroc' : kld_auroc
         }
     return train_result 
     
     
             
         
-def test(model, dataloader, criterion, log_interval: int, name: str = 'TEST', return_per_class: bool = False) -> dict:
+def test(model, dataloader, criterion) -> dict:
     losses_m = AverageMeter()
     
-    mse_score_list = [] 
-    kld_score_list = [] 
     true_labels = [] 
+    score_list = [] 
+    kld_score_list = []
+    true_gts = []
     
     model.eval()
     with torch.no_grad():
         for idx, (images, labels, gts) in enumerate(dataloader):
             # predict
-            t_outputs, s_outputs = model(images)
+            outputs = model(images)
             
             # loss 
-            loss = criterion(t_outputs, s_outputs)
+            loss = criterion(outputs)
             losses_m.update(loss.item())       
             
-            # Stack score 
-            score_map = get_score_map(t_outputs, s_outputs)
-            score_map = score_map.flatten(1).max(1)[0]
+            # get anomaly score 
+            score = get_score_map(outputs)
+            kld_score = get_kld_score(outputs)
             
-            mse_score_list.append(score_map.detach().cpu().numpy())
+            # Stack Scoring for image level 
             true_labels.append(labels.detach().cpu().numpy())
+            score_list.append(score.detach().cpu().numpy())
+            kld_score_list.append(kld_score.detach().cpu().numpy())
+            true_gts.append(gts.detach().cpu().numpy())
             
-    # calculate metrics
-    mse_auroc = roc_auc_score(np.concatenate(true_labels), np.concatenate(mse_score_list))
+            # Stack scoring for pixel level 
+            
+            
+    image_auroc, pixel_auroc = cal_metrics(
+        true_labels = np.concatenate(true_labels),
+        score_maps  = np.concatenate(score_list),
+        gts         = np.concatenate(true_gts)
+        )
+    if np.concatenate(true_labels).sum() != 0:
+        kld_auroc = roc_auc_score(np.concatenate(true_labels), np.concatenate(kld_score_list))
+    else:
+        kld_auroc = 0 
     
     # logging metrics
-    _logger.info('TEST: Loss: %.3f | MSE AUROC: %.3f%% |' % (losses_m.avg, mse_auroc))
+    _logger.info('TEST: Loss: %.3f | Image AUROC: %.3f%%| Pixel AUROC: %.3f%% | KLD AUROC: %.3f%%' % (losses_m.avg, image_auroc, pixel_auroc, kld_auroc))
     
     test_result = {
-        'loss' : losses_m.avg,
-        # 'mse_auroc' : mse_auroc,
-        # 'kld_auroc' : kld_auroc
-    }
+            'loss' : losses_m.avg,
+            'image_auroc' : image_auroc,
+            'pixel_auroc' : pixel_auroc,
+            'kld_auroc' : kld_auroc
+        }
     return test_result 
-            
-            
+
+
 def fit(
     model, trainloader, testloader, criterion, optimizer, scheduler, accelerator: Accelerator,
-    epochs: int, use_wandb: bool, log_interval: int, seed: int = None, savedir: str = None, ckp_metric: str = None
+    nb_round :int, epochs: int, use_wandb: bool, log_interval: int, seed: int = None, savedir: str = None, ckp_metric: str = None
 ) -> None:
 
     step = 0
@@ -269,16 +268,15 @@ def fit(
         eval_metrics = test(
             model        = model, 
             dataloader   = testloader, 
-            criterion    = criterion, 
-            log_interval = log_interval,
-            name         = 'VALID'
+            criterion    = criterion
         )
         
         epoch_time_m.update(time.time() - end)
         end = time.time()
         
         # logging 
-        metrics = OrderedDict(epoch=epoch)
+        metrics = OrderedDict(round=nb_round)
+        metrics.update([('epoch', epoch)])
         metrics.update([('lr',round(optimizer.param_groups[0]['lr'],5))])
         metrics.update([('train_' + k, round(v,4)) for k, v in train_metrics.items()])
         metrics.update([('eval_' + k, round(v,4)) for k, v in eval_metrics.items()])
@@ -310,7 +308,7 @@ def fit(
 
 def al_run(
     exp_name: str, modelname: str, pretrained: bool,
-    strategy: str, n_start: int, n_end: int, n_query: int, n_subset: int, 
+    strategy: str,nb_round:int, n_query: int, n_subset: int, 
     init_method: str, init_method_params: dict,
     trainset, validset, testset,
     criterion_name: str, criterion_params: dict,
@@ -321,22 +319,17 @@ def al_run(
     assert cfg != None if use_wandb else True, 'If you use wandb, configs should be exist.'
     
     # set active learning arguments
-    nb_round = (n_start - n_end)/n_query
-    
-    if nb_round % int(nb_round) != 0:
-        nb_round = int(nb_round) + 1
-    else:
-        nb_round = int(nb_round)
+
     
     # logging
     _logger.info('[total samples] {}, [initial samples] {} [qeury samples] {} [end samples] {} [total round] {}'.format(
-        len(trainset), n_start, n_query, n_end, nb_round))
+        len(trainset), len(trainset), n_query, int(len(trainset)-nb_round*n_query), nb_round))
     
     # inital sampling labeling
     labeled_idx = create_labeled_index(
         method   = init_method,
         trainset = trainset,
-        size     = n_start,
+        size     = len(trainset),
         seed     = seed,
         **init_method_params
     )
@@ -344,7 +337,8 @@ def al_run(
     # create model 
     model = __import__('models').__dict__[cfg.MODEL.method](
         modelname = cfg.MODEL.modelname,
-        out_dim   = cfg.MODEL.out_dim
+        out_dim   = cfg.MODEL.out_dim,
+        contrastive = True if cfg.CRITERION.name == 'MixLoss' else False 
         )
     
     # create criterion 
@@ -385,12 +379,12 @@ def al_run(
     query_log_df['query_round'] = None
     query_log_df.loc[abs(labeled_idx.astype(np.int)-1).astype(bool), 'query_round'] = 'round0'
     # run
-    for r in range(nb_round+1):
-        _logger.info(f'Round : [{r/nb_round+1}]')
+    for r in range(nb_round):
+        _logger.info(f'\nRound : [{r}/{nb_round}]')
         if r != 0:    
             # query sampling    
             query_idx = strategy.query(model, n_subset=n_subset)
-            breakpoint()
+            
             # save query index 
             query_log_df.loc[query_idx, 'query_round'] = f'round{r}'
             query_log_df.to_csv(os.path.join(savedir, 'query_log.csv'), index=False)
@@ -420,7 +414,7 @@ def al_run(
         
         # initialize wandb
         if use_wandb:
-            wandb.init(name=f'{exp_name}_round{r}', project=cfg.TRAIN.wandb.project_name, entity=cfg.TRAIN.wandb.entity, config=OmegaConf.to_container(cfg))
+            wandb.init(name=f'{exp_name}_round{r}', project=cfg.TRAIN.wandb.project_name, config=OmegaConf.to_container(cfg))
 
         # fitting model
         fit(
@@ -431,6 +425,7 @@ def al_run(
             optimizer    = optimizer, 
             scheduler    = scheduler,
             accelerator  = accelerator,
+            nb_round     = r,
             epochs       = epochs, 
             use_wandb    = use_wandb,
             log_interval = log_interval,
