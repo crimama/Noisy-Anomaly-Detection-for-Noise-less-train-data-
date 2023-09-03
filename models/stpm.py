@@ -10,8 +10,9 @@ class STPM(nn.Module):
 
         self.teacher = self._create_model(model_name = model_name, pretrained= True)
         self.student = self._create_model(model_name = model_name, pretrained= False)
-        self.layer = [str(l+4) for l in layer]
-                            
+        self.layer = [str(l+4) for l in layer]                    
+        self.mse_loss = nn.MSELoss(reduction="sum")
+        
     def _create_model(self, model_name: str, pretrained: bool):
         model = timm.create_model(model_name = model_name, pretrained = pretrained)
         model = nn.Sequential(*list(model.children())[:-2])
@@ -48,10 +49,17 @@ class STPM(nn.Module):
     def _criterion(self, t_features: list, s_features: list):
         total_loss = 0 
         for t,s in zip(t_features, s_features):
+            #! Full_base 버전 
             t,s = F.normalize(t, dim=1), F.normalize(s, dim=1)
-            # loss = torch.pow(torch.sum(((t - s) **2),1),0.5).mean() # 각 block 별로 loss 계산  
-            # total_loss += loss  # block 별로 계산한 loss aggregation 
-            total_loss += torch.sum((t.type(torch.float32) - s.type(torch.float32)) ** 2, 1).mean()
+            layer_loss = torch.sum((t.type(torch.float32) - s.type(torch.float32)) ** 2, 1).mean()
+            
+            #! Anomalib 버전 
+            # height, width = t.shape[2:]
+            # norm_teacher_features = F.normalize(t)
+            # norm_student_features = F.normalize(s)
+            # layer_loss = (0.5 / (width * height)) * self.mse_loss(norm_teacher_features, norm_student_features)
+            
+            total_loss += layer_loss
         return total_loss 
 
     def forward(self, x, only_loss:bool = True):
