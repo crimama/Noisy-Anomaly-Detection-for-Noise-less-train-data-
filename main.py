@@ -47,6 +47,7 @@ def run(cfg):
     # load dataset
     trainset, validset, testset = create_dataset(
         dataset_name  = cfg.DATASET.dataset_name,
+        method        = cfg.MODEL.method,
         datadir       = cfg.DATASET.datadir,
         class_name    = cfg.DATASET.class_name,
         img_size      = cfg.DATASET.img_size,
