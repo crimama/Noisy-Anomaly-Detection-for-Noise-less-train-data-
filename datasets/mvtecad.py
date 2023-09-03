@@ -125,14 +125,14 @@ def get_img_dirs(datadir:str, class_name:str) -> pd.DataFrame:
 
 
 def train_test_split(img_dirs:pd.DataFrame, train_anomaly_ratio:float) -> pd.DataFrame:
-    img_dirs['train/test'] = img_dirs[0].apply(lambda x : x.split('/')[-3])
+    img_dirs['train/test'] = img_dirs[0].apply(lambda x : x.split('/')[-3]) # allocate initial train/test label 
     if train_anomaly_ratio == 0:
         pass 
     else:
-        n_train =  len(img_dirs[img_dirs['train/test'] == 'train'])
-        n_test  =  len(img_dirs[img_dirs['train/test'] == 'test'])
+        # compute the number of data for each label initially
+        n_train =  len(img_dirs[img_dirs['train/test'] == 'train']) 
         
-        # calculate the number of data swaping btw train and test 
+        # compute the number of data swaping btw train and test 
         n_train_anomaly = int(n_train * train_anomaly_ratio)
         i_train_anomaly = img_dirs[(img_dirs['train/test'] == 'test') & (img_dirs['anomaly'] == 1)].sample(n_train_anomaly).index # test anomaly -> train 
         i_test_normal = img_dirs[(img_dirs['train/test'] == 'train') & (img_dirs['anomaly'] == 0)].sample(n_train_anomaly).index # train normal -> test 
