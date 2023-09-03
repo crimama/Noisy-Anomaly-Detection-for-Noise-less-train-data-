@@ -20,10 +20,11 @@ def create_dataset(dataset_name:str, datadir:str, class_name:str,
         
     return trainset, validset, testset 
 
-def load_MVTecAD(datadir:str, class_name:str, img_size:int, mean:list, std:list, aug_info = None, 
+def load_MVTecAD(datadir:str, method:str, class_name:str, img_size:int, mean:list, std:list, aug_info = None, 
                    anomaly_ratio:float = 0.1, **kwargs):    
     df = get_df(
-            datadir       = datadir ,
+            datadir       = datadir,
+            method        = method,
             class_name    = class_name,
             anomaly_ratio = anomaly_ratio
         )
@@ -38,7 +39,7 @@ def load_MVTecAD(datadir:str, class_name:str, img_size:int, mean:list, std:list,
 
     validset = MVTecAD(
                 df           = df,
-                train_mode   = 'valid',
+                train_mode   = 'valid' if method == 'STPM' else 'test',
                 transform    = test_augmentation(img_size = img_size, mean = mean, std = std),
                 gt_transform = gt_augmentation(img_size = img_size),
                 gt           = True 
