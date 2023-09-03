@@ -88,7 +88,7 @@ def parser(jupyter:bool = False, default_setting:str = None):
                 OmegaConf.update(cfg, k, convert_type(v), merge=True)
                 
     # Update experiment name
-    cfg.DEFAULT.exp_name = f"anomaly_ratio-{cfg.DATASET.anomaly_ratio}" if cfg.DATASET.anomaly_ratio !=0 else 'Full'
+    cfg.DEFAULT.exp_name = f"{cfg.DEFAULT.exp_name}-anomaly_ratio_{cfg.DATASET.anomaly_ratio}" 
        
     # load dataset statistics
     if cfg.DATASET.dataset_name == 'MVTecAD':
