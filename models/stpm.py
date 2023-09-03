@@ -71,45 +71,20 @@ class STPM(nn.Module):
         else:
             return loss, [t_features, s_features]
         
+    def get_score_map(self, outputs: list) -> torch.Tensor:
+        '''
+        outputs = [t_outputs, s_outputs]
+        sm.shape = (B,1,64,64)
+        '''
+        t_outputs, s_outputs = outputs[0], outputs[1]
+        score_map = 1.
+        for t, s in zip(t_outputs, s_outputs):
+            t,s = F.normalize(t,dim=1),F.normalize(s,dim=1) # channel wise normalize 
+            sm = torch.sum((t - s) ** 2, 1, keepdim=True) # channel wise average 
+            sm = F.interpolate(sm, size=(64, 64), mode='bilinear', align_corners=False) # Intepolation : (1,w,h) -> (1,64,64)
+            score_map = score_map * sm 
+        return score_map
             
-            
-# class SaveHook:
-#     def __init__(self):
-#         self.outputs = [] 
-        
-#     def __reset__(self):
-#         self.outputs = [] 
-        
-#     def __call__(self, module, input, output):
-#         self.outputs.append(output)
-
-# class STPM(nn.Module):
-#     def __init__(self, modelname = 'resnet18', out_dim = 128):
-#         super(STPM,self).__init__()
-        
-#         # create model 
-#         self.teacher = timm.create_model(modelname,pretrained=True)
-#         self.student = timm.create_model(modelname,pretrained=False)
-        
-#         # teacher required grad False  
-#         for p in self.teacher.parameters():
-#             p.requires_grad = False 
-            
-#         # hook fn 
-#         self.teacher_hook = SaveHook()
-#         self.student_hook = SaveHook()
-                    
-#         # register hook 
-#         self._register_hook(self.teacher, self.teacher_hook)
-#         self._register_hook(self.student, self.student_hook)
-        
-#     def _register_hook(self, model, hook):
-#         for name, module in model._modules.items():
-#             if name in ['layer1', 'layer2','layer3','layer4']:
-#                 module.register_forward_hook(hook)
-        
-#     def forward(self, x):            
-#         teacher_z = self.teacher(x)
-#         student_z = self.student(x)
-        
-#         return self.teacher_hook.outputs, self.student_hook.outputs
+                
+                
+    

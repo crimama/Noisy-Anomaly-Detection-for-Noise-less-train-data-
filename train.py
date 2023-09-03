@@ -89,21 +89,7 @@ def compute_pro(masks: np.ndarray, amaps: np.ndarray, num_th: int = 200) -> None
 
     pro_auc = auc(df["fpr"], df["pro"])
     return pro_auc        
-    
-
-def get_score_map(outputs) -> torch.Tensor:
-    '''
-    outputs = [t_outputs, s_outputs]
-    sm.shape = (B,1,64,64)
-    '''
-    t_outputs, s_outputs = outputs[0], outputs[1]
-    score_map = 1.
-    for t, s in zip(t_outputs, s_outputs):
-        t,s = F.normalize(t,dim=1),F.normalize(s,dim=1) # channel wise normalize 
-        sm = torch.sum((t - s) ** 2, 1, keepdim=True) # channel wise average 
-        sm = F.interpolate(sm, size=(64, 64), mode='bilinear', align_corners=False) # Intepolation : (1,w,h) -> (1,64,64)
-        score_map = score_map * sm 
-    return score_map 
+     
 
 def cal_metrics(img_size:int, true_labels:np.ndarray, score_maps:np.ndarray, gts=None):
     # Image Level AUROC 
@@ -236,7 +222,7 @@ def test(model, dataloader, img_size) -> dict:
         losses_m.update(loss.item())       
         
         # get anomaly score 
-        score = get_score_map(outputs)
+        score = model.get_score_map(outputs)
         
         # Stack Scoring for image level 
         true_labels.append(labels.detach().cpu().numpy())
