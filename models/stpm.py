@@ -1,53 +1,68 @@
 import timm 
+import torch 
 import torch.nn as nn 
+import torch.nn.functional as F 
 
 
 class STPM(nn.Module):
-    def __init__(self, modelname = 'resnet18', out_dim:int = 128, contrastive:bool = False):
+    def __init__(self, model_name = 'resnet18', layer: list = [0,1,2,3]):
         super(STPM,self).__init__()
+
+        self.teacher = self._create_model(model_name = model_name, pretrained= True)
+        self.student = self._create_model(model_name = model_name, pretrained= False)
+        self.layer = [str(l+4) for l in layer]
+                            
+    def _create_model(self, model_name: str, pretrained: bool):
+        model = timm.create_model(model_name = model_name, pretrained = pretrained)
+        model = nn.Sequential(*list(model.children())[:-2])
         
+        if pretrained:
+            # teacher required grad False  
+            for p in model.parameters():
+                p.requires_grad = False 
+            model.training = False 
+        return model 
     
-        # create model 
-        if contrastive:
-            self.teacher = timm.create_model(modelname,pretrained=True, num_classes = out_dim)
-        else:
-            self.teacher = timm.create_model(modelname,pretrained=True)
-        self.student = timm.create_model(modelname,pretrained=False)
+    def train(self):
+        self.student.training = True 
         
-        # Change student linear for contrastive learning
-        if contrastive:
-            dim_mlp = self.student.fc.in_features
-            self.student.fc = nn.Sequential(
-                nn.Linear(dim_mlp, dim_mlp),
-                nn.ReLU(),
-                nn.Linear(dim_mlp,out_dim)
-            )
-        
-        # teacher required grad False  
-        for p in self.teacher.parameters():
-            p.requires_grad = False 
+    def eval(self):
+        self.student.training = False 
             
-            
-    def forward(self, x) -> list:
+    def _forward(self, x) -> list:
         t_features = [] 
         s_features = [] 
         
         x_s = x.clone()
         x_t = x.clone() 
-        for (t_name, t_module), (s_name,s_module) in zip(self.teacher._modules.items(),self.student._modules.items()):
+        for (t_name, t_module), (s_name,s_module) in zip(self.teacher._modules.items(), self.student._modules.items()):
             x_t = t_module(x_t)
             x_s = s_module(x_s)
             
-            if t_name in ['layer1','layer2','layer3','layer4']:
+            if t_name in self.layer:
                 t_features.append(x_t)
                 s_features.append(x_s)
                 
-                
-        return [t_features, s_features, x_t, x_s]
+        return t_features, s_features
     
-    def forward_logit(self, x):
-        return self.student(x)
-    
+    def _criterion(self, t_features: list, s_features: list):
+        total_loss = 0 
+        for t,s in zip(t_features, s_features):
+            t,s = F.normalize(t, dim=1), F.normalize(s, dim=1)
+            # loss = torch.pow(torch.sum(((t - s) **2),1),0.5).mean() # 각 block 별로 loss 계산  
+            # total_loss += loss  # block 별로 계산한 loss aggregation 
+            total_loss += torch.sum((t.type(torch.float32) - s.type(torch.float32)) ** 2, 1).mean()
+        return total_loss 
+
+    def forward(self, x, only_loss:bool = True):
+        t_features, s_features = self._forward(x)
+        loss = self._criterion(t_features, s_features)
+        
+        if only_loss:
+            return loss 
+        else:
+            return loss, [t_features, s_features]
+        
             
             
 # class SaveHook:

@@ -55,7 +55,7 @@ def str_to_int(value):
         return False, value
     
 def get_parser():
-    parser = argparse.ArgumentParser(description='Active Learning - Benchmark')
+    parser = argparse.ArgumentParser(description='UAADF')
     parser.add_argument('--default_setting', type=str, default=None, help='default config file')
     parser.add_argument(
         "opts",
@@ -78,8 +78,6 @@ def parser(jupyter:bool = False, default_setting:str = None):
     # load default config
     cfg = OmegaConf.load(default_setting)
     
-    # Update experiment name
-    cfg.DEFAULT.exp_name = cfg.AL.strategy if 'AL' in cfg.keys() else 'Full'
     
     # update cfg
     if not jupyter:
@@ -88,6 +86,9 @@ def parser(jupyter:bool = False, default_setting:str = None):
                 cfg.DEFAULT.exp_name = f'{cfg.DEFAULT.exp_name}-{v}'
             else:
                 OmegaConf.update(cfg, k, convert_type(v), merge=True)
+                
+    # Update experiment name
+    cfg.DEFAULT.exp_name = f"anomaly_ratio-{cfg.DATASET.anomaly_ratio}" if cfg.DATASET.anomaly_ratio !=0 else 'Full'
        
     # load dataset statistics
     if cfg.DATASET.dataset_name == 'MVTecAD':
@@ -97,20 +98,4 @@ def parser(jupyter:bool = False, default_setting:str = None):
     
     print(OmegaConf.to_yaml(cfg))
     
-    return cfg  
-
-def jupyter_parser(default_setting:str=None, strategy_setting:str=None):
-    cfg = OmegaConf.load(default_setting)    
-    
-    if strategy_setting:
-        cfg_task = OmegaConf.load(strategy_setting)
-        cfg = OmegaConf.merge(cfg, cfg_task)
-         
-    # load dataset statistics
-    if cfg.DATASET.dataset_name == 'MVTecAD':
-        cfg.DATASET.update(stats.datasets[cfg.DATASET.class_name])
-    else:    
-        cfg.DATASET.update(stats.datasets[cfg.DATASET.dataset_name])
-    
-    cfg = EasyDict(OmegaConf.to_container(cfg))
     return cfg  

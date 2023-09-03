@@ -12,37 +12,25 @@ from torch.utils.data import Dataset
 class MVTecAD(Dataset):
     '''
     Example 
-        trainset = MVTecAD(
-            datadir       = cfg.DATASET.datadir,
-            class_name    = cfg.DATASET.params.class_name,
-            transform     = train_augmentation(img_size = cfg.DATASET.img_size, mean = cfg.DATASET.mean, std = cfg.DATASET.std, aug_info = cfg.DATASET.aug_info),
-            gt_transform  = gt_augmentation(img_size = cfg.DATASET.img_size),
-            anomaly_ratio = cfg.DATASET.anomaly_ratio,
-            mode          = 'train',
-            gt            = True 
+        df = get_df(
+            datadir       = datadir ,
+            class_name    = class_name,
+            anomaly_ratio = anomaly_ratio
         )
-        testset = MVTecAD(
-            datadir       = cfg.DATASET.datadir,
-            class_name    = cfg.DATASET.params.class_name,
-            transform     = test_augmentation(img_size = cfg.DATASET.img_size, mean = cfg.DATASET.mean, std = cfg.DATASET.std),
-            gt_transform  = gt_augmentation(img_size = cfg.DATASET.img_size),
-            anomaly_ratio = cfg.DATASET.anomaly_ratio,
-            mode          = 'test',
-            df            = trainset.df,
-            gt            = True 
+        trainset = MVTecAD(
+            df           = df,
+            train_mode   = 'train',
+            transform    = train_augmentation,
+            gt_transform = gt_augmentation,
+            gt           = True 
         )
     '''
-    def __init__(self, datadir:str , class_name:str, transform, gt_transform,
-                anomaly_ratio:float, train_mode='train', gt=True, df=None):
+    def __init__(self, df: pd.DataFrame, train_mode:str, transform, gt_transform, gt=True):
+        '''
+        train_mode = ['train','valid','test']
+        '''
         
-        if df is not None:
-            self.df = df 
-        else: 
-            # init image dirs & labels 
-            self.df = _train_test_split(                
-                img_paths = _get_img_dirs(datadir=datadir, class_name=class_name),
-                train_anomaly_ratio = anomaly_ratio
-            )
+        self.df = df 
         
         # train / test split 
         self.img_dirs = self.df[self.df['train/test'] == train_mode][0].values # column 0 : img_dirs 
@@ -53,6 +41,18 @@ class MVTecAD(Dataset):
         self.gt_transform = gt_transform 
 
         self.transform = transform 
+        
+    def _get_ground_truth(self, img_dir,img):
+        img_dir = img_dir.split('/')
+        if img_dir[-2] !='good':
+            img_dir[-3] = 'ground_truth'
+            img_dir[-1] = img_dir[-1].split('.')[0] + '_mask.png'
+            img_dir = '/'.join(img_dir)
+            image = cv2.imread(img_dir)
+        else:
+            image = np.zeros_like(torch.permute(img,dims=(1,2,0)))
+            
+        return image 
         
     def __len__(self):
         return len(self.img_dirs)
@@ -65,7 +65,7 @@ class MVTecAD(Dataset):
         label = self.labels[idx]
         
         if self.gt:
-            gt = _get_ground_truth(img_dir,img)
+            gt = self._get_ground_truth(img_dir,img)
             gt = self.gt_transform(gt)
             gt = (gt >= 0.5).float()
             
@@ -76,54 +76,61 @@ class MVTecAD(Dataset):
         
         
 
-def _get_ground_truth(img_dir,img):
-    img_dir = img_dir.split('/')
-    if img_dir[-2] !='good':
-        img_dir[-3] = 'ground_truth'
-        img_dir[-1] = img_dir[-1].split('.')[0] + '_mask.png'
-        img_dir = '/'.join(img_dir)
-        image = cv2.imread(img_dir)
-    else:
-        image = np.zeros_like(torch.permute(img,dims=(1,2,0)))
-        
-    return image 
+def get_df(datadir: str, class_name: str, anomaly_ratio: float):
+    '''
+    df = get_df(
+            datadir       = datadir ,
+            class_name    = class_name,
+            anomaly_ratio = anomaly_ratio
+        )
+    '''
+    
+    # get img_dirs dataframe 
+    img_dirs = get_img_dirs(datadir=datadir, class_name=class_name)
+    
+    # train test split
+    df = train_test_split(                
+        img_dirs            = img_dirs,
+        train_anomaly_ratio = anomaly_ratio
+        )
+    
+    # train valid split, valid is 20% of train
+    length_train = len(df[df['train/test'] == 'train'])
+    length_valid = int(length_train*0.2)
+    index_valid = df[df['train/test'] == 'train'].sample(length_valid).index
+    df.loc[index_valid,'train/test'] = 'valid'
+    
+    return df 
+
     
 
-def _get_img_dirs(datadir, class_name):
-        class_name = '*' if class_name =='all' else class_name 
-        
-        img_paths = pd.Series(sorted(glob(os.path.join(datadir,'MVTecAD', class_name,'*/*/*.png'))))
-        img_paths = pd.DataFrame(img_paths[img_paths.apply(lambda x : x.split('/')[-3]) != 'ground_truth']).reset_index(drop=True)
-        img_paths['anomaly'] = img_paths[0].apply(lambda x : 1 if x.split('/')[-2] != 'good' else 0)
-        img_paths['train/test'] = ''
-        return img_paths 
+def get_img_dirs(datadir:str, class_name:str) -> pd.DataFrame:
+    class_name = '*' if class_name =='all' else class_name 
+    
+    img_dirs = pd.Series(sorted(glob(os.path.join(datadir,'MVTecAD', class_name,'*/*/*.png'))))
+    img_dirs = pd.DataFrame(img_dirs[img_dirs.apply(lambda x : x.split('/')[-3]) != 'ground_truth']).reset_index(drop=True)
+    img_dirs['anomaly'] = img_dirs[0].apply(lambda x : 1 if x.split('/')[-2] != 'good' else 0)
+    img_dirs['train/test'] = ''
+    return img_dirs 
 
 
-def _train_test_split(img_paths, train_anomaly_ratio):
+def train_test_split(img_dirs:pd.DataFrame, train_anomaly_ratio:float) -> pd.DataFrame:
+    img_dirs['train/test'] = img_dirs[0].apply(lambda x : x.split('/')[-3])
     if train_anomaly_ratio == 0:
-        img_paths['train/test'] = img_paths[0].apply(lambda x : x.split('/')[-3])
+        pass 
     else:
-        anomaly_index = list(img_paths[img_paths['anomaly']==1].index)
-        normal_index = list(img_paths[img_paths['anomaly']==0].index)
-
-        # Anomaly : test -> train 
-        anomaly_train = int(len(normal_index) * train_anomaly_ratio)
-        anomaly_train_index = np.random.choice(anomaly_index, anomaly_train,replace=False)
-        img_paths.loc[anomaly_train_index,'train/test'] = 'train'
-
-        # Anomaly test 
-        anomaly_test_index = np.array(list(set(anomaly_index) - set(anomaly_train_index)))
-        img_paths.loc[anomaly_test_index, 'train/test'] = 'test'
-
-        # Normal : train -> test 
-        normal_test_index = np.random.choice(normal_index, anomaly_train,replace=False)
-        img_paths.loc[normal_test_index, 'train/test'] = 'test'
-        # normal : train 
-
-        normal_train_index = np.array(list(set(normal_index) - set(normal_test_index)))
-        img_paths.loc[normal_train_index, 'train/test'] = 'train'
+        n_train =  len(img_dirs[img_dirs['train/test'] == 'train'])
+        n_test  =  len(img_dirs[img_dirs['train/test'] == 'test'])
+        
+        # calculate the number of data swaping btw train and test 
+        n_train_anomaly = int(n_train * train_anomaly_ratio)
+        i_train_anomaly = img_dirs[(img_dirs['train/test'] == 'test') & (img_dirs['anomaly'] == 1)].sample(n_train_anomaly).index # test anomaly -> train 
+        i_test_normal = img_dirs[(img_dirs['train/test'] == 'train') & (img_dirs['anomaly'] == 0)].sample(n_train_anomaly).index # train normal -> test 
+        
+        img_dirs.loc[i_train_anomaly,'train/test'] = 'train'
+        img_dirs.loc[i_test_normal, 'train/test'] = 'test'
     
-    return img_paths 
+    return img_dirs 
 
 
         

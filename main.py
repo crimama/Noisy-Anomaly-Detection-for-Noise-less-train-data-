@@ -6,7 +6,7 @@ import torch
 import logging
 from arguments import parser
 
-from train import al_run
+from train import refinement_run
 from datasets import create_dataset
 from log import setup_default_logging
 
@@ -35,7 +35,6 @@ def run(cfg):
 
     # set accelerator
     accelerator = Accelerator(
-        gradient_accumulation_steps = cfg.TRAIN.grad_accum_steps,
         mixed_precision             = cfg.TRAIN.mixed_precision
     )
 
@@ -46,7 +45,7 @@ def run(cfg):
     _logger.info('Device: {}'.format(accelerator.device))
 
     # load dataset
-    trainset, testset = create_dataset(
+    trainset, validset, testset = create_dataset(
         dataset_name  = cfg.DATASET.dataset_name,
         datadir       = cfg.DATASET.datadir,
         class_name    = cfg.DATASET.class_name,
@@ -62,7 +61,8 @@ def run(cfg):
     savedir = os.path.join(
                                 cfg.DEFAULT.savedir,
                                 cfg.DATASET.dataset_name,
-                                cfg.DATASET.class_name
+                                cfg.DATASET.class_name,
+                                cfg.DEFAULT.exp_name
                             )
     
     # assert not os.path.isdir(savedir), f'{savedir} already exists'
@@ -72,36 +72,35 @@ def run(cfg):
     OmegaConf.save(cfg, os.path.join(savedir, 'configs.yaml'))
     
     # run active learning
-    al_run(
-        exp_name           = cfg.DEFAULT.exp_name,
+    refinement_run(
+        exp_name         = cfg.DEFAULT.exp_name,
+
+        method           = cfg.MODEL.method,
+        model_name       = cfg.MODEL.model_name,
+        model_params     = cfg.MODEL.get('params',{}),
+
+        trainset         = trainset,
+        validset         = validset,
+        testset          = testset,
         
-        modelname          = cfg.MODEL.modelname,
-        pretrained         = cfg.MODEL.pretrained,
-        
-        trainset           = trainset,
-        testset            = testset,
-        
-        criterion_name     = cfg.CRITERION.name,
-        criterion_params   = cfg.CRITERION.get('params',{}),
-        
-        img_size           = cfg.DATASET.img_size,
-        num_classes        = cfg.DATASET.num_classes,
-        batch_size         = cfg.DATASET.batch_size,
-        test_batch_size    = cfg.DATASET.test_batch_size,
-        num_workers        = cfg.DATASET.num_workers,
-        
-        opt_name           = cfg.OPTIMIZER.opt_name,
-        lr                 = cfg.OPTIMIZER.lr,
-        opt_params         = cfg.OPTIMIZER.get('params',{}),
-        
-        epochs             = cfg.TRAIN.epochs,
-        log_interval       = cfg.TRAIN.log_interval,
-        use_wandb          = cfg.TRAIN.wandb.use,
-        
-        savedir            = savedir,
-        seed               = cfg.DEFAULT.seed,
-        accelerator        = accelerator,
-        cfg                = cfg
+        nb_round         = 1,
+
+        batch_size       = cfg.DATASET.batch_size,
+        test_batch_size  = cfg.DATASET.test_batch_size,
+        num_workers      = cfg.DATASET.num_workers,
+
+        opt_name         = cfg.OPTIMIZER.opt_name,
+        lr               = cfg.OPTIMIZER.lr,
+        opt_params       = cfg.OPTIMIZER.get('params',{}),
+
+        epochs           = cfg.TRAIN.epochs,
+        log_interval     = cfg.TRAIN.log_interval,
+        use_wandb        = cfg.TRAIN.wandb.use,
+
+        savedir          = savedir,
+        seed             = cfg.DEFAULT.seed,
+        accelerator      = accelerator,
+        cfg              = cfg
     )
     
 

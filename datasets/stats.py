@@ -31,37 +31,31 @@ datasets = {
         },
     "bottle": {
         "num_classes": 2,
-        "img_size": 224,
         "mean": [0.5354,0.5317,0.548],
         "std": [0.3667,0.3666,0.3499]
     },
     "cable": {
         "num_classes": 2,
-        "img_size": 224,
         "mean": [0.3262,0.4143,0.4665],
         "std": [0.1524,0.2141,0.2378]
     },
     "capsule": {
         "num_classes": 2,
-        "img_size": 224,
         "mean": [0.6968,0.6668,0.654],
         "std": [0.2375,0.2584,0.2598]
     },
     "carpet": {
         "num_classes": 2,
-        "img_size": 224,
         "mean": [0.363,0.35,0.3561],
         "std": [0.1447,0.1394,0.1272]
     },
     "grid": {
         "num_classes": 2,
-        "img_size": 224,
         "mean": [0.4478,0.4478,0.4478],
         "std": [0.1565,0.1565,0.1565]
     },
     "hazelnut":{
         "num_classes":2,
-        "img_size":224,
         "mean":[
             0.2401,
             0.1768,
@@ -75,7 +69,6 @@ datasets = {
     },
     "leather":{
         "num_classes":2,
-        "img_size":224,
         "mean":[
             0.3912,
             0.2622,
@@ -89,7 +82,6 @@ datasets = {
     },
     "metal_nut":{
         "num_classes":2,
-        "img_size":224,
         "mean":[
             0.2143,
             0.2365,
@@ -103,7 +95,6 @@ datasets = {
     },
     "pill":{
         "num_classes":2,
-        "img_size":224,
         "mean":[
             0.3026,
             0.3031,
@@ -117,7 +108,6 @@ datasets = {
     },
     "screw":{
         "num_classes":2,
-        "img_size":224,
         "mean":[
             0.7222,
             0.7222,
@@ -131,7 +121,6 @@ datasets = {
     },
     "tile":{
         "num_classes":2,
-        "img_size":224,
         "mean":[
             0.4567,
             0.4713,
@@ -145,7 +134,6 @@ datasets = {
     },
     "toothbrush":{
         "num_classes":2,
-        "img_size":224,
         "mean":[
             0.1993,
             0.1853,
@@ -159,7 +147,6 @@ datasets = {
     },
     "transistor":{
         "num_classes":2,
-        "img_size":224,
         "mean":[
             0.3865,
             0.2763,
@@ -173,7 +160,6 @@ datasets = {
     },
     "wood":{
         "num_classes":2,
-        "img_size":224,
         "mean":[
             0.6701,
             0.4768,
@@ -187,7 +173,6 @@ datasets = {
     },
     "zipper":{
         "num_classes":2,
-        "img_size":224,
         "mean":[
             0.4011,
             0.4011,
@@ -201,7 +186,6 @@ datasets = {
     },
     "all":{
         "num_classes":15,
-        "img_size":224,
         "mean":[
             0.4236,
             0.3948,
