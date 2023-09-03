@@ -76,13 +76,16 @@ class MVTecAD(Dataset):
         
         
 
-def get_df(datadir: str, class_name: str, anomaly_ratio: float):
+def get_df(datadir: str, class_name: str, anomaly_ratio: float, method, **params: dict):
     '''
-    df = get_df(
-            datadir       = datadir ,
-            class_name    = class_name,
-            anomaly_ratio = anomaly_ratio
-        )
+    args:
+        normal_ratio : 0 ~ 0.25 for PatchCore 
+    Example:
+        df = get_df(
+                datadir       = datadir ,
+                class_name    = class_name,
+                anomaly_ratio = anomaly_ratio
+            )
     '''
     
     # get img_dirs dataframe 
@@ -94,11 +97,18 @@ def get_df(datadir: str, class_name: str, anomaly_ratio: float):
         train_anomaly_ratio = anomaly_ratio
         )
     
-    # train valid split, valid is 20% of train
-    length_train = len(df[df['train/test'] == 'train'])
-    length_valid = int(length_train*0.2)
-    index_valid = df[df['train/test'] == 'train'].sample(length_valid).index
-    df.loc[index_valid,'train/test'] = 'valid'
+    if method == 'PatchCore':
+        length_train = len(df[df['train/test'] == 'train'])
+        length_test = int(length_train * (1-params['normal_ratio']))
+        index_test = df[df['train/test'] == 'train'].sample(length_test).index
+        df.loc[index_test,'train/test'] = 'test'
+        
+    elif method == 'STPM':
+        # train valid split, valid is 20% of train
+        length_train = len(df[df['train/test'] == 'train'])
+        length_valid = int(length_train*0.2)
+        index_valid = df[df['train/test'] == 'train'].sample(length_valid).index
+        df.loc[index_valid,'train/test'] = 'valid'
     
     return df 
 
