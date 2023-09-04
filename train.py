@@ -134,12 +134,12 @@ def train(model, dataloader, optimizer, accelerator: Accelerator, log_interval: 
         # predict
         loss = model(images)
 
-        # calc loss
-        accelerator.backward(loss)
-
         # loss update
-        optimizer.step()
-        optimizer.zero_grad()
+        if model.__class__.__name__ != 'PatchCore':
+            accelerator.backward(loss)
+            optimizer.step()
+            optimizer.zero_grad()
+            
         losses_m.update(loss.item())            
         
         # batch time
@@ -177,32 +177,34 @@ def validation(model, dataloader, log_interval: int) -> dict:
     losses_m = AverageMeter()
     
     end = time.time()
-    
-    model.eval()
-    for idx, (images, _, _) in enumerate(dataloader):   
-        data_time_m.update(time.time() - end)     
-        
-        # predict
-        loss = model(images)
-        losses_m.update(loss.item())    
-        
-        # batch time
-        batch_time_m.update(time.time() - end)
-        
-        
-        _logger.info('Valid [{:>4d}/{}] Loss: {loss.val:>6.4f} ({loss.avg:>6.4f}) '
-                    'Time: {batch_time.val:.3f}s, {rate:>7.2f}/s ({batch_time.avg:.3f}s, {rate_avg:>7.2f}/s) '
-                    'Data: {data_time.val:.3f} ({data_time.avg:.3f})'.format(
-                    (idx+1), 
-                    len(dataloader),
-                    loss       = losses_m, 
-                    batch_time = batch_time_m,
-                    rate       = images[0].size(0) / batch_time_m.val,
-                    rate_avg   = images[0].size(0) / batch_time_m.avg,
-                    data_time  = data_time_m
-                    ))
+    if model.__class__.__name__ != 'PatchCore':
+        model.eval()
+        for idx, (images, _, _) in enumerate(dataloader):   
+            data_time_m.update(time.time() - end)     
             
-    valid_result = {'loss' : losses_m.avg}
+            # predict
+            loss = model(images)
+            losses_m.update(loss.item())    
+            
+            # batch time
+            batch_time_m.update(time.time() - end)
+            
+            
+            _logger.info('Valid [{:>4d}/{}] Loss: {loss.val:>6.4f} ({loss.avg:>6.4f}) '
+                        'Time: {batch_time.val:.3f}s, {rate:>7.2f}/s ({batch_time.avg:.3f}s, {rate_avg:>7.2f}/s) '
+                        'Data: {data_time.val:.3f} ({data_time.avg:.3f})'.format(
+                        (idx+1), 
+                        len(dataloader),
+                        loss       = losses_m, 
+                        batch_time = batch_time_m,
+                        rate       = images[0].size(0) / batch_time_m.val,
+                        rate_avg   = images[0].size(0) / batch_time_m.avg,
+                        data_time  = data_time_m
+                        ))
+            
+        valid_result = {'loss' : losses_m.avg}
+    else: # In case PatchCore 
+        valid_result = {'loss' : 0}
     return valid_result
 
 @torch.no_grad()
@@ -212,17 +214,19 @@ def test(model, dataloader, img_size) -> dict:
     true_labels = [] 
     score_list = [] 
     true_gts = []
-    
-    model.eval()
+    if model.__class__.__name__ != 'PatchCore':
+        model.eval()
+    else:
+        model.eval(next(model.parameters()).device)
     for idx, (images, labels, gts) in enumerate(dataloader):
         # predict
-        loss, outputs = model(images, only_loss = False)
-        
-        # loss 
-        losses_m.update(loss.item())       
-        
-        # get anomaly score 
-        score = model.get_score_map(outputs)
+        if model.__class__.__name__ != 'PatchCore':
+            loss, outputs = model(images, only_loss = False)            
+            losses_m.update(loss.item())       
+            score = model.get_score_map(outputs)
+        else:
+            _, score = model.get_score_map(images)
+            losses_m.update(0)
         
         # Stack Scoring for image level 
         true_labels.append(labels.detach().cpu().numpy())
