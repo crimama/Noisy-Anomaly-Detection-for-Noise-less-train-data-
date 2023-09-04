@@ -20,21 +20,18 @@ class PatchCore(nn.Module):
     def train(self):
         self.model.train()
         
-    def eval(self):
-        self.model.eval()
+    def eval(self, device='cpu'):
+        self.model.training = False 
         
         embeddings = torch.vstack(self.embeddings)
-        self.model.subsample_embedding(embeddings, self.coreset_sampling_ratio)
+        self.model.subsample_embedding(embeddings.to(device), self.coreset_sampling_ratio)
         
     def forward(self, x):
         self.train()
         embedding = self.model(x)
-        self.embeddings.append(embedding.detach())
-        output = embedding  
-        return output 
+        self.embeddings.append(embedding.detach().cpu())  
+        return torch.Tensor([0]) 
     
     def get_score_map(self, x):
-        self.eval()
         score_map, score = self.model(x)
-        output = [score_map, score]
-        return output 
+        return score, score_map
