@@ -62,8 +62,8 @@ def run(cfg):
     savedir = os.path.join(
                                 cfg.DEFAULT.savedir,
                                 cfg.DATASET.dataset_name,
-                                cfg.DATASET.class_name,
                                 cfg.MODEL.method,
+                                cfg.DATASET.class_name,
                                 cfg.DEFAULT.exp_name
                             )
     
