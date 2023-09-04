@@ -63,6 +63,7 @@ def run(cfg):
                                 cfg.DEFAULT.savedir,
                                 cfg.DATASET.dataset_name,
                                 cfg.DATASET.class_name,
+                                cfg.MODEL.method,
                                 cfg.DEFAULT.exp_name
                             )
     
