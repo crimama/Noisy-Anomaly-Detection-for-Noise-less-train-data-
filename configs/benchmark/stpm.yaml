@@ -1,6 +1,6 @@
 DEFAULT:
   seed: 0
-  savedir: ./results/benchmark
+  savedir: ./results
   exp_name: base
 
 DATASET:
