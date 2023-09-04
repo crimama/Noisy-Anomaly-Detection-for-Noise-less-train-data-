@@ -282,12 +282,6 @@ def fit(
             log_interval = log_interval
         )
         
-        test_metrics = test(
-            img_size     = img_size,
-            model        = model, 
-            dataloader   = testloader,
-        )
-        
         epoch_time_m.update(time.time() - end)
         end = time.time()
         
@@ -300,7 +294,7 @@ def fit(
         metrics.update([('lr',round(optimizer.param_groups[0]['lr'],5))])
         metrics.update([('train_' + k, round(v,4)) for k, v in train_metrics.items()])
         metrics.update([('valid_' + k, round(v,4)) for k, v in valid_metrics.items()])
-        metrics.update([('test_' + k, round(v,4)) for k, v in test_metrics.items()])
+        # metrics.update([('test_' + k, round(v,4)) for k, v in test_metrics.items()])
         metrics.update([('epoch time',round(epoch_time_m.val,4))])
         
         with open(os.path.join(savedir, 'log.txt'),  'a') as f:
@@ -318,13 +312,23 @@ def fit(
         ckp_cond = best_score > valid_metrics['loss']
         if savedir and ckp_cond:
             best_score = valid_metrics['loss']
-            state = {'best_step':step,
-                     'valid': valid_metrics,
-                     'test': test_metrics}
-            json.dump(state, open(os.path.join(savedir, f'results_seed{seed}_best.json'), 'w'), indent='\t')
+            best_step = step 
             torch.save(model.state_dict(), os.path.join(savedir, f'model_seed{seed}_best.pt'))
         
-
+    # Evaluation best checkpoint 
+    best_weight = torch.load(os.path.join(savedir, f'model_seed{seed}_best.pt'))
+    model.load_state_dict(best_weight)
+    
+    test_metrics = test(
+            img_size     = img_size,
+            model        = model, 
+            dataloader   = testloader,
+        )
+    
+    state = {'best_step': best_step,
+                'test'  : test_metrics
+                }
+    json.dump(state, open(os.path.join(savedir, f'results_seed{seed}_best.json'), 'w'), indent='\t')
         
 def refinement_run(
     exp_name: str, 

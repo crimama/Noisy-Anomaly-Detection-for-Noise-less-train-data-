@@ -1,7 +1,7 @@
 DEFAULT:
   seed: 0
   savedir: ./results/benchmark
-  exp_name: anomalib_loss
+  exp_name: base
 
 DATASET:
   datadir: ../Data

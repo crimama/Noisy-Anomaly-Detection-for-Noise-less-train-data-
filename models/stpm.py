@@ -50,14 +50,14 @@ class STPM(nn.Module):
         total_loss = 0 
         for t,s in zip(t_features, s_features):
             #! Full_base 버전 
-            # t,s = F.normalize(t, dim=1), F.normalize(s, dim=1)
-            # layer_loss = torch.sum((t.type(torch.float32) - s.type(torch.float32)) ** 2, 1).mean()
+            t,s = F.normalize(t, dim=1), F.normalize(s, dim=1)
+            layer_loss = torch.sum((t.type(torch.float32) - s.type(torch.float32)) ** 2, 1).mean()
             
             #! Anomalib 버전 
-            height, width = t.shape[2:]
-            norm_teacher_features = F.normalize(t)
-            norm_student_features = F.normalize(s)
-            layer_loss = (0.5 / (width * height)) * self.mse_loss(norm_teacher_features, norm_student_features)
+            # height, width = t.shape[2:]
+            # norm_teacher_features = F.normalize(t)
+            # norm_student_features = F.normalize(s)
+            # layer_loss = (0.5 / (width * height)) * self.mse_loss(norm_teacher_features, norm_student_features)
             
             total_loss += layer_loss
         return total_loss 
