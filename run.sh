@@ -6,23 +6,27 @@
 
 gpu_id=$1
 if [ $gpu_id == '0' ];then
-# class_name='leather zipper metal_nut wood pill grid tile capsule'
-class_name='transistor'
+class_name='leather zipper metal_nut wood pill grid tile capsule'
 elif [ $gpu_id == '1' ];then
-# class_name='hazelnut toothbrush screw carpet bottle cable transistor'
-class_name='tile'
+class_name='hazelnut toothbrush screw carpet bottle cable transistor'
 fi 
 
-# anomaly_ratio='0.2 0.04 0.06 0.08 0.1'
+
+# anomaly_ratio='0.02 0.04 0.06 0.08 0.1'
+normal_ratio='0.25'
 anomaly_ratio='0'
 
-for r in $anomaly_ratio
+for nr in $normal_ratio
 do
-    for c in $class_name
+    for r in $anomaly_ratio
     do
-        echo "anomaly_ratio: $r, class_name: $c"
-        CUDA_VISIBLE_DEVICES=$gpu_id python main.py --default_setting configs/benchmark/default_setting.yaml \
-                    DATASET.anomaly_ratio $r \
-                    DATASET.class_name $c
+        for c in $class_name
+        do
+            echo "anomaly_ratio: $r, normal_ratio: $nr class_name: $c"
+            CUDA_VISIBLE_DEVICES=$gpu_id python main.py --default_setting configs/benchmark/patchcore.yaml \
+                        DATASET.anomaly_ratio $r \
+                        DATASET.class_name $c \
+                        DATASET.params.normal_ratio $nr
+        done
     done
 done
