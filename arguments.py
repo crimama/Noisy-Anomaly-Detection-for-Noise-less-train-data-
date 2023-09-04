@@ -53,11 +53,10 @@ def str_to_int(value):
         return out
     except NameError:
         return False, value
-
-def parser():
-    parser = argparse.ArgumentParser(description='Active Learning - Benchmark')
+    
+def get_parser():
+    parser = argparse.ArgumentParser(description='UAADF')
     parser.add_argument('--default_setting', type=str, default=None, help='default config file')
-    parser.add_argument('--strategy_setting', type=str, default=None, help='strategy config file')    
     parser.add_argument(
         "opts",
         help="Modify config options using the command-line",
@@ -66,50 +65,40 @@ def parser():
     )
 
     args = parser.parse_args()
+    return args 
 
-    # load default config
-    cfg = OmegaConf.load(args.default_setting)
+def parser(jupyter:bool = False, default_setting:str = None):
     
-    # load strategy config
-    if args.strategy_setting:
-        cfg_strategy = OmegaConf.load(args.strategy_setting)
-        cfg = OmegaConf.merge(cfg, cfg_strategy)
+    if jupyter:
+        args = default_setting 
     else:
-        del cfg['AL']
+        args = get_parser()
+        default_setting = args.default_setting 
+        
+    # load default config
+    cfg = OmegaConf.load(default_setting)
     
-    # Update experiment name
-    cfg.DEFAULT.exp_name = cfg.AL.strategy if 'AL' in cfg.keys() else 'Full'
     
     # update cfg
-    for k, v in zip(args.opts[0::2], args.opts[1::2]):
-        if k == 'DEFAULT.exp_name':
-            cfg.DEFAULT.exp_name = f'{cfg.DEFAULT.exp_name}-{v}'
-        else:
-            OmegaConf.update(cfg, k, convert_type(v), merge=True)
+    if not jupyter:
+        for k, v in zip(args.opts[0::2], args.opts[1::2]):
+            if k == 'DEFAULT.exp_name':
+                cfg.DEFAULT.exp_name = f'{cfg.DEFAULT.exp_name}-{v}'
+            else:
+                OmegaConf.update(cfg, k, convert_type(v), merge=True)
+                
+    # Update experiment name
+    if cfg.MODEL.method == 'PatchCore':
+        cfg.DEFAULT.exp_name = f"{cfg.DEFAULT.exp_name}-normal_ratio_{cfg.DATASET.params.normal_ratio}-anomaly_ratio_{cfg.DATASET.anomaly_ratio}" 
+    else:
+        cfg.DEFAULT.exp_name = f"{cfg.DEFAULT.exp_name}-anomaly_ratio_{cfg.DATASET.anomaly_ratio}" 
        
     # load dataset statistics
-    if cfg.DATASET.dataset_name == 'AnomalyDataset':
-        data_name = cfg.DATASET.params.normal_dataset 
-    else: 
-        data_name = cfg.DATASET.params.class_name 
-    cfg.DATASET.update(stats.datasets[data_name])
+    if cfg.DATASET.dataset_name == 'MVTecAD':
+        cfg.DATASET.update(stats.datasets['ImageNet'])
+    else:    
+        cfg.DATASET.update(stats.datasets[cfg.DATASET.dataset_name])
     
     print(OmegaConf.to_yaml(cfg))
     
-    return cfg  
-
-def jupyter_parser(default_setting:str=None, strategy_setting:str=None):
-    cfg = OmegaConf.load(default_setting)    
-    
-    if strategy_setting:
-        cfg_task = OmegaConf.load(strategy_setting)
-        cfg = OmegaConf.merge(cfg, cfg_task)
-        
-    if cfg.DATASET.dataset_name == 'AnomalyDataset':
-        data_name = cfg.DATASET.params.normal_dataset 
-    else: 
-        data_name = cfg.DATASET.params.class_name 
-    cfg.DATASET.update(stats.datasets[data_name])
-    
-    cfg = EasyDict(OmegaConf.to_container(cfg))
     return cfg  

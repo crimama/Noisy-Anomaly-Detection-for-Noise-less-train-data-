@@ -24,7 +24,29 @@ seaborn
 easydict 
 pyDantic
 ```
+# Run 
+```bash
+anomaly_ratio='0 0.05 0.1 0.15'
+query_strategy='entropy_sampling random_sampling margin_sampling least_confidence'
+class_name='leather zipper metal_nut wood pill grid tile capsule hazelnut toothbrush screw carpet bottle cable all'
 
+for q in $query_strategy
+do
+    for r in $anomaly_ratio
+    do
+        for c in $class_name
+        do
+            echo "query_strategy: $q, anomaly_ratio: $r, class_name: $c"
+            python main.py --default_setting configs/benchmark/default_setting.yaml \
+                        --strategy_setting configs/benchmark/$q.yaml \
+                        DATASET.anomaly_ratio $r \
+                        DATASET.params.class_name $c
+        done
+    done
+done
+
+
+```
 
 # Methods
 - 전체 데이터(Normal + Anomaly)로 Anomaly Detection 모델을 학습하며 Active Learning의 query strategy를 이용해 Uncertainty가 높은 데이터를 제외, 이를 반복하여 최종적으로 Normal data로만 Anomaly Detection 모델 학습 
@@ -80,29 +102,7 @@ pyDantic
 - ~~Random Sampling~~
 - Entropy Sampling
 
-## Run 
-```bash
-anomaly_ratio='0 0.05 0.1 0.15'
-query_strategy='entropy_sampling random_sampling margin_sampling least_confidence'
-class_name='leather zipper metal_nut wood pill grid tile capsule hazelnut toothbrush screw carpet bottle cable all'
 
-for q in $query_strategy
-do
-    for r in $anomaly_ratio
-    do
-        for c in $class_name
-        do
-            echo "query_strategy: $q, anomaly_ratio: $r, class_name: $c"
-            python main.py --default_setting configs/benchmark/default_setting.yaml \
-                        --strategy_setting configs/benchmark/$q.yaml \
-                        DATASET.anomaly_ratio $r \
-                        DATASET.params.class_name $c
-        done
-    done
-done
-
-
-```
 
 # Result 
 
@@ -121,13 +121,3 @@ done
         - but 사용한 데이터 수가 적음
 - **일부 class 누락**
     - bash 파일에서 잘못해서 일부 class 누락 됨
-- Augmentation -> 학습 방해 
-- Loss Scale -> 각 Loss의 scale 확인 
-- 이 방법의 핵심은 Anomaly가 제외 되 나가는 것이기 떄문에 최종 round의 학습 데이터에서 Anomaly가 얼마나 남아 있는가
-- SimCLR 의 방법 -> SimCLR를 하는 과정에서 다른 AUgmentation이 된 두 input의 차이를 줄이는 것인데, 기존은 하나의 Augmentation 로 들어간 것을 최소화
-- Active Learning 보다는 Data Refinement에 가깝
-- Early stopping 해서 round 중간에 멈춰도 되지 않을까
-- 하나의 카테고리만 사용하는 Task에서는 SimCLR는 오히려 안맞지 않을까?
-- fp16을 사용 했을 때 모델 성능에 영향을 끼치지는 않을까
-- resnet18 말고 이외의 방법
-

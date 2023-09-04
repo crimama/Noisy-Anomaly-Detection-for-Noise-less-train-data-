@@ -56,8 +56,7 @@ def add_augmentation(transform: transforms.Compose, img_size: int, aug_info: lis
         for aug in aug_info:
             transform.transforms.insert(-1, augments_dict[aug])   
     else: 
-        for aug in ['RandomResizedCrop', 'RandomHorizontalFlip','RandomColorJitter','GaussianBlur']:
-            transform.transforms.insert(-1, augments_dict[aug])   
+        transform.transforms.insert(-1, augments_dict['Resize'])
     
     return transform
 

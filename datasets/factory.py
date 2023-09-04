@@ -1,69 +1,59 @@
 import os
 from torchvision import datasets
 from .augmentation import train_augmentation, test_augmentation, gt_augmentation  
-from .build import AnomalyDataset, MVTecAD
+from .mvtecad import MVTecAD, get_df 
 from .stats import datasets
 
-def create_dataset(dataset_name:str, datadir:str,
+def create_dataset(dataset_name:str, datadir:str, method:str, class_name:str,
                    img_size:int , mean:list , std:list, aug_info:bool = None,
-                    anomaly_ratio:float=0.1, **kwargs):
-    trainset, testset  = eval(f"load_{dataset_name}")(
+                    anomaly_ratio:float=0.1, **params):
+    trainset, validset, testset  = eval(f"load_{dataset_name}")(
                                                     datadir         = datadir,
+                                                    method          = method,
+                                                    class_name      = class_name,
                                                     img_size        = img_size,
                                                     mean            = mean,
                                                     std             = std,
                                                     aug_info        = aug_info, 
                                                     anomaly_ratio   = anomaly_ratio,
-                                                    **kwargs
+                                                    **params
                                                 )
         
-    return trainset, testset 
+    return trainset, validset, testset 
 
-def load_AnomalyDataset(normal_dataset:str, anomaly_dataset:str, datadir:str,
-                    img_size:int , mean:list , std:list, aug_info:bool = None,
-                    anomaly_ratio:float=0.1, total_size:int=10000):
-    trainset = AnomalyDataset(
-            normal_dataset  = normal_dataset,
-            anomaly_dataset = anomaly_dataset,
-            datadir         = datadir,
-            transforms      = train_augmentation(img_size=img_size, mean=mean, std=std, aug_info=aug_info),
-            anomaly_ratio   = anomaly_ratio,
-            total_size      = total_size,
-            train           = True 
-            )
-    testset = AnomalyDataset(
-            normal_dataset  = normal_dataset,
-            anomaly_dataset = anomaly_dataset,
-            datadir         = datadir,
-            transforms      = test_augmentation(img_size=img_size, mean=mean, std=std),
-            anomaly_ratio   = anomaly_ratio,
-            total_size      = 1000,
-            train           = False 
-            )
-    return trainset, testset 
+def load_MVTecAD(datadir:str, method:str, class_name:str, img_size:int, mean:list, std:list, aug_info = None, 
+                   anomaly_ratio:float = 0.1, **params):    
+    df = get_df(
+            datadir       = datadir,
+            method        = method,
+            class_name    = class_name,
+            anomaly_ratio = anomaly_ratio,
+            **params
+        )
 
-def load_MVTecAD(datadir:str,
-                img_size:int , mean:list , std:list, aug_info:bool = None,
-                anomaly_ratio:float=0.1, **kwargs):
     trainset = MVTecAD(
-        datadir       = datadir,
-        transform     = train_augmentation(img_size = img_size, mean=mean, std=std, aug_info=aug_info),
-        gt_transform  = gt_augmentation(img_size = img_size),
-        anomaly_ratio = anomaly_ratio,
-        mode          = 'train',
-        gt            = True,
-        **kwargs
-        
-    )
+                df           = df,
+                train_mode   = 'train',
+                transform    = train_augmentation(img_size = img_size, mean = mean, std = std, aug_info = aug_info),
+                gt_transform = gt_augmentation(img_size = img_size),
+                gt           = True 
+            )
+
+    validset = MVTecAD(
+                df           = df,
+                train_mode   = 'valid' if method == 'STPM' else 'test',
+                transform    = test_augmentation(img_size = img_size, mean = mean, std = std),
+                gt_transform = gt_augmentation(img_size = img_size),
+                gt           = True 
+            )
+
     testset = MVTecAD(
-        datadir       = datadir,
-        transform     = test_augmentation(img_size = img_size, mean=mean, std=std),
-        gt_transform  = gt_augmentation(img_size = img_size),
-        anomaly_ratio = anomaly_ratio,
-        mode          = 'test',
-        gt            = True,
-        df            = trainset.df,
-        **kwargs
-    )
+                df           = df,
+                train_mode   = 'test',
+                transform    = test_augmentation(img_size = img_size, mean = mean, std = std),
+                gt_transform = gt_augmentation(img_size = img_size),
+                gt           = True 
+            )
     
-    return trainset, testset 
+    return trainset, validset, testset 
+        

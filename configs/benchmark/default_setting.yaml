@@ -1,41 +1,36 @@
 DEFAULT:
   seed: 0
   savedir: ./results/benchmark
+
 DATASET:
-  datadir: ../Data/MVtecAD
+  datadir: ../Data
   batch_size: 32
-  test_batch_size: 64
+  test_batch_size: 128
   num_workers: 8
   dataset_name: MVTecAD  # [AnomalyDataset,MVTecAD]
-  params:
-    class_name: bottle  
-  anomaly_ratio: 0.1
   aug_info: null
-CRITERION:
-  name: MixLoss # [InfoNCE, FeatDist, MixLoss]
-  params:
-    layers: [0,1,2,3]
-    temperature: 0.5
-    alpha: 0.1
+  anomaly_ratio: 0
+  class_name: bottle  
+  img_size: 256
+
 OPTIMIZER:
-  opt_name: AdamW
-  lr: 0.01
+  opt_name: SGD
+  lr: 0.4
+
 TRAIN:
-  epochs: 30
+  epochs: 100
   grad_accum_steps: 1
-  mixed_precision: fp16
-  log_interval: 5
+  mixed_precision: 'no'
+  log_interval: 2
   wandb:
-    use: true
+    use: false
     project_name: UAADF
+
 MODEL:
-  method : STPM
-  modelname: resnet18
-  pretrained: false
-  out_dim: 128
-AL:
-  n_query: 10
-  n_round: 10
-  n_subset: null
-  init:
-    method: random_select
+  method: STPM 
+  model_name: resnet18
+  params:
+    layer: [1,2,3]
+
+REFINEMENT:
+  nb_round: 0
