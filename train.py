@@ -124,7 +124,6 @@ def metric_logging(savedir, use_wandb,
     metrics.update([('lr',round(optimizer.param_groups[0]['lr'],5))])
     metrics.update([('train_' + k, round(v,4)) for k, v in train_metrics.items()])
     metrics.update([('valid_' + k, round(v,4)) for k, v in valid_metrics.items()])
-    # metrics.update([('test_' + k, round(v,4)) for k, v in test_metrics.items()])
     metrics.update([('epoch time',round(epoch_time_m.val,4))])
     
     with open(os.path.join(savedir, 'log.txt'),  'a') as f:
@@ -154,7 +153,7 @@ def train(model, dataloader, optimizer, accelerator: Accelerator, log_interval: 
         loss = model(images)
 
         # loss update
-        if model.__class__.__name__ != 'PatchCore':
+        if model.__class__.__name__ not in ['PatchCore']:
             accelerator.backward(loss)
             optimizer.step()
             optimizer.zero_grad()
@@ -190,7 +189,7 @@ def train(model, dataloader, optimizer, accelerator: Accelerator, log_interval: 
     return train_result 
 
 @torch.no_grad()
-def validation(model, dataloader, log_interval: int) -> dict:
+def validation(model, dataloader) -> dict:
     batch_time_m = AverageMeter()
     data_time_m = AverageMeter()
     losses_m = AverageMeter()
@@ -223,6 +222,9 @@ def validation(model, dataloader, log_interval: int) -> dict:
             
         valid_result = {'loss' : losses_m.avg}
     else: # In case PatchCore 
+        '''
+        Patchcore forward 의 return을 0으로 해놔서 따로 안 빼도 될 듯 싶지만 일단 킵, 추후 수정 
+        '''
         valid_result = {'loss' : 0}
     return valid_result
 
@@ -233,11 +235,14 @@ def test(model, dataloader, img_size) -> dict:
     true_labels = [] 
     score_list = [] 
     true_gts = []
+    
     if model.__class__.__name__ != 'PatchCore':
         model.eval()
     else:
-        model.eval(next(model.parameters()).device)
+        model.eval(next(model.parameters()).device) #Patchcore의 경우 embedding들에게 device를 할당해주어야 함 
+        
     for idx, (images, labels, gts) in enumerate(dataloader):
+        
         # predict
         if model.__class__.__name__ != 'PatchCore':
             loss, outputs = model(images, only_loss = False)            
@@ -296,8 +301,7 @@ def fit(
         
         valid_metrics = validation(
             model        = model,
-            dataloader   = validloader,
-            log_interval = log_interval
+            dataloader   = validloader
         )
         
         epoch_time_m.update(time.time() - end)
@@ -311,8 +315,7 @@ def fit(
             savedir = savedir, use_wandb = use_wandb, r = r, epoch = epoch, step = step,
             optimizer = optimizer, train_metrics = train_metrics, valid_metrics = valid_metrics, epoch_time_m = epoch_time_m
         )
-        
-        
+                
         # checkpoint - save best results and model weights
         ckp_cond = best_score > valid_metrics['loss']
         if savedir and ckp_cond:
@@ -331,8 +334,7 @@ def fit(
         )
     
     state = {'best_step': best_step,
-                'test'  : test_metrics
-                }
+                'test'  : test_metrics}
     json.dump(state, open(os.path.join(savedir, f'results_seed{seed}_best.json'), 'w'), indent='\t')
         
 def refinement_run(
