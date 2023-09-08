@@ -5,13 +5,14 @@ import torch.nn.functional as F
 
 
 class STPM(nn.Module):
-    def __init__(self, model_name = 'resnet18', layer: list = [0,1,2,3]):
+    def __init__(self, model_name:str,  input_size:list, layer:list):
         super(STPM,self).__init__()
 
         self.teacher = self._create_model(model_name = model_name, pretrained= True)
         self.student = self._create_model(model_name = model_name, pretrained= False)
         self.layer = [str(l+4) for l in layer]                    
         self.mse_loss = nn.MSELoss(reduction="sum")
+        self.input_size = input_size
         
     def _create_model(self, model_name: str, pretrained: bool):
         model = timm.create_model(model_name = model_name, pretrained = pretrained)
@@ -81,10 +82,8 @@ class STPM(nn.Module):
         for t, s in zip(t_outputs, s_outputs):
             t,s = F.normalize(t,dim=1),F.normalize(s,dim=1) # channel wise normalize 
             sm = torch.sum((t - s) ** 2, 1, keepdim=True) # channel wise average 
-            sm = F.interpolate(sm, size=(64, 64), mode='bilinear', align_corners=False) # Intepolation : (1,w,h) -> (1,64,64)
+            sm = F.interpolate(sm, size=(self.input_size, self.input_size), mode='bilinear', align_corners=False) # Intepolation : (1,w,h) -> (1,64,64)
             score_map = score_map * sm 
         return score_map
             
-                
-                
     
