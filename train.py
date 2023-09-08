@@ -383,8 +383,10 @@ def refinement_run(
         optimizer = __import__('torch.optim', fromlist='optim').__dict__[opt_name](model.parameters(), lr=lr, **opt_params)
 
         # scheduler
-        # scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=epochs, T_mult=1, eta_min=0.00001)
-        scheduler = None 
+        if cfg.SCHEDULER.method:
+            scheduler = __import__('torch.optim.lr_scheduler', fromlist='lr_scheduler').__dict__[cfg.SCHEDULER.method](optimizer, **cfg.SCHEDULER.params)
+        else:
+            scheduler = None
         
         
         # # prepraring accelerator
