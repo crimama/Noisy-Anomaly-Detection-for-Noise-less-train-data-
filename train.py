@@ -115,6 +115,25 @@ def cal_metrics(img_size:int, true_labels:np.ndarray, score_maps:np.ndarray, gts
     return image_auroc, pixel_auroc, aupro
 
 
+def metric_logging(savedir, use_wandb, 
+                    r, epoch, step,
+                    optimizer, train_metrics, valid_metrics, epoch_time_m):
+    
+    metrics = OrderedDict(round=r)
+    metrics.update([('epoch', epoch)])
+    metrics.update([('lr',round(optimizer.param_groups[0]['lr'],5))])
+    metrics.update([('train_' + k, round(v,4)) for k, v in train_metrics.items()])
+    metrics.update([('valid_' + k, round(v,4)) for k, v in valid_metrics.items()])
+    # metrics.update([('test_' + k, round(v,4)) for k, v in test_metrics.items()])
+    metrics.update([('epoch time',round(epoch_time_m.val,4))])
+    
+    with open(os.path.join(savedir, 'log.txt'),  'a') as f:
+        f.write(json.dumps(metrics) + "\n")
+    if use_wandb:
+        wandb.log(metrics, step=step)
+    
+
+
 def train(model, dataloader, optimizer, accelerator: Accelerator, log_interval: int) -> dict:
     '''
     for imgs, labels in dataloader  -> imgs : [img_i, img_j]
@@ -260,12 +279,11 @@ def fit(
     img_size, r :int, epochs: int, use_wandb: bool, log_interval: int, seed: int = None, savedir: str = None
 ) -> None:
 
-    step = 0
     best_score = np.inf
     epoch_time_m = AverageMeter()
     end = time.time() 
     
-    for epoch in range(epochs):
+    for step,  epoch in enumerate(range(epochs)):
         _logger.info(f'\nEpoch: {epoch+1}/{epochs}')
         
         train_metrics = train(
@@ -289,24 +307,11 @@ def fit(
             scheduler.step()
         
         # logging 
-        metrics = OrderedDict(round=r)
-        metrics.update([('epoch', epoch)])
-        metrics.update([('lr',round(optimizer.param_groups[0]['lr'],5))])
-        metrics.update([('train_' + k, round(v,4)) for k, v in train_metrics.items()])
-        metrics.update([('valid_' + k, round(v,4)) for k, v in valid_metrics.items()])
-        # metrics.update([('test_' + k, round(v,4)) for k, v in test_metrics.items()])
-        metrics.update([('epoch time',round(epoch_time_m.val,4))])
+        metric_logging(
+            savedir = savedir, use_wandb = use_wandb, r = r, epoch = epoch, step = step,
+            optimizer = optimizer, train_metrics = train_metrics, valid_metrics = valid_metrics, epoch_time_m = epoch_time_m
+        )
         
-        with open(os.path.join(savedir, 'log.txt'),  'a') as f:
-            f.write(json.dumps(metrics) + "\n")
-        if use_wandb:
-            wandb.log(metrics, step=step)
-        
-        step += 1
-        
-        # update scheduler  
-        if scheduler:
-            scheduler.step()
         
         # checkpoint - save best results and model weights
         ckp_cond = best_score > valid_metrics['loss']
@@ -384,7 +389,7 @@ def refinement_run(
         optimizer = __import__('torch.optim', fromlist='optim').__dict__[opt_name](model.parameters(), lr=lr, **opt_params)
 
         # scheduler
-        if cfg.SCHEDULER.method:
+        if scheduler_name:
             scheduler = __import__('torch.optim.lr_scheduler', fromlist='lr_scheduler').__dict__[scheduler_name](optimizer, **scheduler_params)
         else:
             scheduler = None
