@@ -91,7 +91,7 @@ def compute_pro(masks: np.ndarray, amaps: np.ndarray, num_th: int = 200) -> None
     return pro_auc        
      
 
-def cal_metrics(true_labels:np.ndarray, score_maps:np.ndarray, gts=None):
+def cal_metrics(true_labels:np.ndarray, score_maps:np.ndarray, gts=None, aupro: bool = False):
     # Image Level AUROC 
     size = score_maps.shape[0]
     image_level_score = score_maps.reshape(size,-1).max(1)
@@ -109,21 +109,32 @@ def cal_metrics(true_labels:np.ndarray, score_maps:np.ndarray, gts=None):
     # cal pixel auroc score 
     pixel_auroc = roc_auc_score(gts.flatten(), pixel_score.flatten())
     
-    # Pixel Level AUPRO 
-    aupro = compute_pro(gts, pixel_score.squeeze(3))
+    if aupro:
+        # Pixel Level AUPRO 
+        aupro = compute_pro(gts, pixel_score.squeeze(3))
+        return {
+            'image_auroc' : image_auroc, 
+            'pixel_auroc' : pixel_auroc, 
+            'aupro' : aupro
+        }
+    else:
+        return {
+            'image_auroc' : image_auroc, 
+            'pixel_auroc' : pixel_auroc
+        }
     
-    return image_auroc, pixel_auroc, aupro
 
 
 def metric_logging(savedir, use_wandb, 
-                    r, epoch, step,
-                    optimizer, train_metrics, valid_metrics, epoch_time_m):
+                    r, epoch, step,epoch_time_m,
+                    optimizer, train_metrics, valid_metrics, test_metrics):
     
     metrics = OrderedDict(round=r)
     metrics.update([('epoch', epoch)])
     metrics.update([('lr',round(optimizer.param_groups[0]['lr'],5))])
     metrics.update([('train_' + k, round(v,4)) for k, v in train_metrics.items()])
     metrics.update([('valid_' + k, round(v,4)) for k, v in valid_metrics.items()])
+    metrics.update([('test_' + k, round(v,4)) for k, v in test_metrics.items()])
     metrics.update([('epoch time',round(epoch_time_m.val,4))])
     
     with open(os.path.join(savedir, 'log.txt'),  'a') as f:
@@ -229,7 +240,7 @@ def validation(model, dataloader) -> dict:
     return valid_result
 
 @torch.no_grad()
-def test(model, dataloader, img_size) -> dict:
+def test(model, dataloader, aupro:bool = False) -> dict:
     losses_m = AverageMeter()
     
     true_labels = [] 
@@ -260,27 +271,30 @@ def test(model, dataloader, img_size) -> dict:
         # Stack scoring for pixel level 
             
             
-    image_auroc, pixel_auroc, aupro = cal_metrics(
+    metric_results = cal_metrics(
         true_labels = np.concatenate(true_labels),
         score_maps  = np.concatenate(score_list),
-        gts         = np.concatenate(true_gts)
+        gts         = np.concatenate(true_gts),
+        aupro       = aupro
         )
     
     # logging metrics
-    _logger.info('TEST: Loss: %.3f | Image AUROC: %.3f%%| Pixel AUROC: %.3f%% | Pixel AUPRO: %.3f%%' % (losses_m.avg, image_auroc, pixel_auroc, aupro))
+    if aupro:
+        _logger.info('TEST: Loss: %.3f | Image AUROC: %.3f%%| Pixel AUROC: %.3f%% | Pixel AUPRO: %.3f%%' % (
+            losses_m.avg, metric_results['image_auroc'], metric_results['pixel_auroc'], aupro))
+    else:
+        _logger.info('TEST: Loss: %.3f | Image AUROC: %.3f%%| Pixel AUROC: %.3f%%' % (
+            losses_m.avg, metric_results['image_auroc'], metric_results['pixel_auroc']))
     
-    test_result = {
-            'loss' : losses_m.avg,
-            'image_auroc' : image_auroc,
-            'pixel_auroc' : pixel_auroc,
-            'aupro'       : aupro
-        }
+    test_result = OrderedDict(loss = losses_m.avg)
+    test_result.update([(k, round(v,4)) for k, v in metric_results.items()])
+
     return test_result 
 
 
 def fit(
     model, trainloader, validloader, testloader, optimizer, scheduler, accelerator: Accelerator,
-    img_size, r :int, epochs: int, use_wandb: bool, log_interval: int, seed: int = None, savedir: str = None
+    r :int, epochs: int, use_wandb: bool, log_interval: int, seed: int = None, savedir: str = None
 ) -> None:
 
     best_score = np.inf
@@ -303,6 +317,12 @@ def fit(
             dataloader   = validloader
         )
         
+        test_metrics = test(
+            model        = model, 
+            dataloader   = testloader,
+            aupro        = False 
+        )
+        
         epoch_time_m.update(time.time() - end)
         end = time.time()
         
@@ -312,7 +332,8 @@ def fit(
         # logging 
         metric_logging(
             savedir = savedir, use_wandb = use_wandb, r = r, epoch = epoch, step = step,
-            optimizer = optimizer, train_metrics = train_metrics, valid_metrics = valid_metrics, epoch_time_m = epoch_time_m
+            optimizer = optimizer, epoch_time_m = epoch_time_m,
+            train_metrics = train_metrics, valid_metrics = valid_metrics, test_metrics = test_metrics
         )
                 
         # checkpoint - save best results and model weights
@@ -327,9 +348,9 @@ def fit(
     model.load_state_dict(best_weight)
     
     test_metrics = test(
-            img_size     = img_size,
             model        = model, 
             dataloader   = testloader,
+            aupro        = True
         )
     
     state = {'best_step': best_step,
@@ -414,7 +435,6 @@ def refinement_run(
             optimizer    = optimizer, 
             scheduler    = scheduler,
             accelerator  = accelerator,
-            img_size     = cfg.DATASET.img_size,
             r            = r,
             epochs       = epochs, 
             use_wandb    = use_wandb,
