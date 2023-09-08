@@ -336,7 +336,8 @@ def refinement_run(
     trainset, validset, testset,
     nb_round: int,
     batch_size: int, test_batch_size: int, num_workers: int, 
-    opt_name: str, lr: float, opt_params: dict,
+    opt_name: str, lr: float, opt_params: dict, 
+    scheduler_name: str, scheduler_params: dict, 
     epochs: int, log_interval: int, use_wandb: bool, 
     savedir: str, seed: int, accelerator: Accelerator, cfg: dict = None):
     
@@ -384,7 +385,7 @@ def refinement_run(
 
         # scheduler
         if cfg.SCHEDULER.method:
-            scheduler = __import__('torch.optim.lr_scheduler', fromlist='lr_scheduler').__dict__[cfg.SCHEDULER.method](optimizer, **cfg.SCHEDULER.params)
+            scheduler = __import__('torch.optim.lr_scheduler', fromlist='lr_scheduler').__dict__[scheduler_name](optimizer, **scheduler_params)
         else:
             scheduler = None
         

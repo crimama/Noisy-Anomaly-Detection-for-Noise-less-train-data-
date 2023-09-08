@@ -94,6 +94,9 @@ def run(cfg):
         opt_name         = cfg.OPTIMIZER.opt_name,
         lr               = cfg.OPTIMIZER.lr,
         opt_params       = cfg.OPTIMIZER.get('params',{}),
+        
+        scheduler_name   = cfg.SCHEDULER.name,
+        scheduler_params = cfg.SCHEDULER.get('params',{}),
 
         epochs           = cfg.TRAIN.epochs,
         log_interval     = cfg.TRAIN.log_interval,
