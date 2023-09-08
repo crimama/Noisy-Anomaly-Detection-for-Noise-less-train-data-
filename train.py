@@ -91,7 +91,7 @@ def compute_pro(masks: np.ndarray, amaps: np.ndarray, num_th: int = 200) -> None
     return pro_auc        
      
 
-def cal_metrics(img_size:int, true_labels:np.ndarray, score_maps:np.ndarray, gts=None):
+def cal_metrics(true_labels:np.ndarray, score_maps:np.ndarray, gts=None):
     # Image Level AUROC 
     size = score_maps.shape[0]
     image_level_score = score_maps.reshape(size,-1).max(1)
@@ -100,7 +100,7 @@ def cal_metrics(img_size:int, true_labels:np.ndarray, score_maps:np.ndarray, gts
     # Pixel Level AUROC 
     # preprocess score for pixel 
     pixel_score = np.transpose(score_maps,(0,2,3,1))
-    pixel_score = np.array([np.expand_dims(cv2.resize(score, dsize=(img_size,img_size)), axis=2) for score in pixel_score])
+    # pixel_score = np.array([np.expand_dims(cv2.resize(score, dsize=(img_size,img_size)), axis=2) for score in pixel_score])
     
     # preprocess gt for pixel 
     gts = np.transpose(gts, (0,2,3,1))
@@ -261,7 +261,6 @@ def test(model, dataloader, img_size) -> dict:
             
             
     image_auroc, pixel_auroc, aupro = cal_metrics(
-        img_size    = img_size,
         true_labels = np.concatenate(true_labels),
         score_maps  = np.concatenate(score_list),
         gts         = np.concatenate(true_gts)

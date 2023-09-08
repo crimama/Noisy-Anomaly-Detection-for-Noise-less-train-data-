@@ -136,3 +136,9 @@ figure.ipynb
 results/
 *.yaml
 .yaml
+
+anomalib/
+anomalib/*
+anomalib/data/__pycache__/__init__.cpython-38.pyc
+*.pyc
+anomalib/data/__pycache__/__init__.cpython-38.pyc
