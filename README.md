@@ -1,6 +1,7 @@
-# UAADF : Unsupervised Active Anomaly Detection Framework 
+# UAADF : Unsupervised Anomaly Detection Framework 
 - Anomaly Detection Framework for Fully unsupervised learning 
-- Using Active learning query strategy for Data Refinement 
+- Using Active learning query strategy for Data Refinement
+- Now ongoing 
 
 
 # Environments

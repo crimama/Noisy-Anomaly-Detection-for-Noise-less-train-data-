@@ -4,30 +4,25 @@ from .augmentation import train_augmentation, test_augmentation, gt_augmentation
 from .mvtecad import MVTecAD, get_df 
 from .stats import datasets
 
-def create_dataset(dataset_name:str, datadir:str, method:str, class_name:str,
+def create_dataset(dataset_name:str, datadir:str, class_name:str,
                    img_size:int , mean:list , std:list, aug_info:bool = None,
-                    anomaly_ratio:float=0.1, **params):
-    trainset, validset, testset  = eval(f"load_{dataset_name}")(
+                    **params):
+    trainset, testset  = eval(f"load_{dataset_name}")(
                                                     datadir         = datadir,
-                                                    method          = method,
                                                     class_name      = class_name,
                                                     img_size        = img_size,
                                                     mean            = mean,
                                                     std             = std,
                                                     aug_info        = aug_info, 
-                                                    anomaly_ratio   = anomaly_ratio,
                                                     **params
                                                 )
         
-    return trainset, validset, testset 
+    return trainset, testset 
 
-def load_MVTecAD(datadir:str, method:str, class_name:str, img_size:int, mean:list, std:list, aug_info = None, 
-                   anomaly_ratio:float = 0.1, **params):    
+def load_MVTecAD(datadir:str, class_name:str, img_size:int, mean:list, std:list, aug_info = None, **params):    
     df = get_df(
             datadir       = datadir,
-            method        = method,
             class_name    = class_name,
-            anomaly_ratio = anomaly_ratio,
             **params
         )
 
@@ -35,14 +30,6 @@ def load_MVTecAD(datadir:str, method:str, class_name:str, img_size:int, mean:lis
                 df           = df,
                 train_mode   = 'train',
                 transform    = train_augmentation(img_size = img_size, mean = mean, std = std, aug_info = aug_info),
-                gt_transform = gt_augmentation(img_size = img_size),
-                gt           = True 
-            )
-
-    validset = MVTecAD(
-                df           = df,
-                train_mode   = 'valid' if method == 'STPM' else 'test',
-                transform    = test_augmentation(img_size = img_size, mean = mean, std = std),
                 gt_transform = gt_augmentation(img_size = img_size),
                 gt           = True 
             )
@@ -55,5 +42,5 @@ def load_MVTecAD(datadir:str, method:str, class_name:str, img_size:int, mean:lis
                 gt           = True 
             )
     
-    return trainset, validset, testset 
+    return trainset, testset 
         

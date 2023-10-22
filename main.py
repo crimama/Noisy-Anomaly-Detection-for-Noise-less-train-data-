@@ -8,7 +8,7 @@ from arguments import parser
 
 from train import refinement_run
 from datasets import create_dataset
-from log import setup_default_logging
+from utils.log import setup_default_logging
 
 from accelerate import Accelerator
 from omegaconf import OmegaConf
@@ -45,16 +45,14 @@ def run(cfg):
     _logger.info('Device: {}'.format(accelerator.device))
 
     # load dataset
-    trainset, validset, testset = create_dataset(
+    trainset, testset = create_dataset(
         dataset_name  = cfg.DATASET.dataset_name,
-        method        = cfg.MODEL.method,
         datadir       = cfg.DATASET.datadir,
         class_name    = cfg.DATASET.class_name,
         img_size      = cfg.DATASET.img_size,
         mean          = cfg.DATASET.mean,
         std           = cfg.DATASET.std,
         aug_info      = cfg.DATASET.aug_info,
-        anomaly_ratio = cfg.DATASET.anomaly_ratio,
         **cfg.DATASET.get('params',{})
     )
     
@@ -62,9 +60,10 @@ def run(cfg):
     savedir = os.path.join(
                                 cfg.DEFAULT.savedir,
                                 cfg.DATASET.dataset_name,
-                                cfg.DATASET.class_name,
                                 cfg.MODEL.method,
-                                cfg.DEFAULT.exp_name
+                                cfg.DATASET.class_name,
+                                cfg.DEFAULT.exp_name,
+                                f"seed_{cfg.DEFAULT.seed}"
                             )
     
     # assert not os.path.isdir(savedir), f'{savedir} already exists'
@@ -77,16 +76,19 @@ def run(cfg):
     refinement_run(
         exp_name         = cfg.DEFAULT.exp_name,
 
+        # Model 
         method           = cfg.MODEL.method,
-        model_name       = cfg.MODEL.model_name,
+        backbone         = cfg.MODEL.backbone,
         model_params     = cfg.MODEL.get('params',{}),
 
+        # Dataset
         trainset         = trainset,
-        validset         = validset,
         testset          = testset,
         
+        # Refinement 
         nb_round         = 1,
 
+        # Train
         batch_size       = cfg.DATASET.batch_size,
         test_batch_size  = cfg.DATASET.test_batch_size,
         num_workers      = cfg.DATASET.num_workers,
@@ -94,6 +96,9 @@ def run(cfg):
         opt_name         = cfg.OPTIMIZER.opt_name,
         lr               = cfg.OPTIMIZER.lr,
         opt_params       = cfg.OPTIMIZER.get('params',{}),
+        
+        scheduler_name   = cfg.SCHEDULER.name,
+        scheduler_params = cfg.SCHEDULER.get('params',{}),
 
         epochs           = cfg.TRAIN.epochs,
         log_interval     = cfg.TRAIN.log_interval,

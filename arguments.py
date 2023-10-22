@@ -89,16 +89,17 @@ def parser(jupyter:bool = False, default_setting:str = None):
                 
     # Update experiment name
     if cfg.MODEL.method == 'PatchCore':
-        cfg.DEFAULT.exp_name = f"{cfg.DEFAULT.exp_name}-normal_ratio_{cfg.DATASET.params.normal_ratio}-anomaly_ratio_{cfg.DATASET.anomaly_ratio}" 
+        cfg.DEFAULT.exp_name = f"{cfg.DEFAULT.exp_name}-coreset_ratio_{cfg.MODEL.params.coreset_sampling_ratio}-anomaly_ratio_{cfg.DATASET.anomaly_ratio}" 
     else:
         cfg.DEFAULT.exp_name = f"{cfg.DEFAULT.exp_name}-anomaly_ratio_{cfg.DATASET.anomaly_ratio}" 
        
     # load dataset statistics
     if cfg.DATASET.dataset_name == 'MVTecAD':
         cfg.DATASET.update(stats.datasets['ImageNet'])
+        #cfg.DATASET.update(stats.datasets[cfg.DATASET.class_name])
     else:    
         cfg.DATASET.update(stats.datasets[cfg.DATASET.dataset_name])
     
-    print(OmegaConf.to_yaml(cfg))
+    #print(OmegaConf.to_yaml(cfg))
     
     return cfg  

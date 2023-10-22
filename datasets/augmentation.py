@@ -25,7 +25,6 @@ def test_augmentation(img_size: int, mean: tuple, std: tuple):
         transforms.Resize((img_size, img_size)),
         transforms.Normalize(mean, std),
     ])
-    
     return transform
 
 def gt_augmentation(img_size: int):
@@ -34,19 +33,15 @@ def gt_augmentation(img_size: int):
         transforms.Resize((img_size, img_size))
     ])
     return transform 
-    
 
 
-def get_color_jitter(s=1):
-    color_jitter = transforms.ColorJitter(0.8 * s, 0.8 * s, 0.8 * s, 0.2 * s)
-    return color_jitter
 
 def add_augmentation(transform: transforms.Compose, img_size: int, aug_info: list = None):
     augments_dict = {
         'RandomCrop': transforms.RandomCrop((img_size, img_size), padding=4),
         'RandomResizedCrop' : transforms.RandomResizedCrop((img_size, img_size)),
-        'RandomHorizontalFlip': transforms.RandomHorizontalFlip(),
-        'RandomVerticalFlip': transforms.RandomVerticalFlip(),
+        'RandomHorizontalFlip': transforms.RandomHorizontalFlip(p=0.5),
+        'RandomVerticalFlip': transforms.RandomVerticalFlip(p=0.3),
         'RandomColorJitter' : transforms.RandomApply([get_color_jitter()], p=0.8),
         'GaussianBlur' : GaussianBlur(kernel_size=int(0.1*img_size)),
         'Resize': transforms.Resize((img_size, img_size))
@@ -60,6 +55,9 @@ def add_augmentation(transform: transforms.Compose, img_size: int, aug_info: lis
     
     return transform
 
+def get_color_jitter(s=1):
+    color_jitter = transforms.ColorJitter(0.8 * s, 0.8 * s, 0.8 * s, 0.2 * s)
+    return color_jitter
 
 class GaussianBlur(object):
     """blur a single image on CPU"""
