@@ -96,9 +96,10 @@ def parser(jupyter:bool = False, default_setting:str = None):
     # load dataset statistics
     if cfg.DATASET.dataset_name == 'MVTecAD':
         cfg.DATASET.update(stats.datasets['ImageNet'])
+        #cfg.DATASET.update(stats.datasets[cfg.DATASET.class_name])
     else:    
         cfg.DATASET.update(stats.datasets[cfg.DATASET.dataset_name])
     
-    print(OmegaConf.to_yaml(cfg))
+    #print(OmegaConf.to_yaml(cfg))
     
     return cfg  
