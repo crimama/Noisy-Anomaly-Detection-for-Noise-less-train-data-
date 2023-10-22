@@ -29,7 +29,6 @@ class MVTecAD(Dataset):
         '''
         train_mode = ['train','valid','test']
         '''
-        
         self.df = df 
         
         # train / test split 
@@ -40,9 +39,10 @@ class MVTecAD(Dataset):
         self.gt = gt # mode 
         self.gt_transform = gt_transform 
 
+        # Image 
         self.transform = transform 
         
-    def _get_ground_truth(self, img_dir,img):
+    def _get_ground_truth(self, img_dir, img):
         img_dir = img_dir.split('/')
         if img_dir[-2] !='good':
             img_dir[-3] = 'ground_truth'
@@ -50,8 +50,9 @@ class MVTecAD(Dataset):
             img_dir = '/'.join(img_dir)
             image = cv2.imread(img_dir)
         else:
-            image = np.zeros_like(torch.permute(img,dims=(1,2,0)))
-            
+            image = np.zeros_like(torch.permute(img,dims=(1,2,0))).astype(np.uint8)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
         return image 
         
     def __len__(self):
@@ -61,13 +62,13 @@ class MVTecAD(Dataset):
         img_dir = self.img_dirs[idx]
         img = cv2.imread(img_dir)
         img = self.transform(img)
-        
+        img = img.type(torch.float32)
         label = self.labels[idx]
         
         if self.gt:
             gt = self._get_ground_truth(img_dir,img)
             gt = self.gt_transform(gt)
-            gt = (gt >= 0.5).float()
+            gt = (gt > 0).float()
             
             return img, label, gt 
         
@@ -76,45 +77,32 @@ class MVTecAD(Dataset):
         
         
 
-def get_df(datadir: str, class_name: str, anomaly_ratio: float, method, **params: dict):
+def get_df(datadir: str, class_name: str):
     '''
     args:
-        normal_ratio : 0 ~ 0.25 for PatchCore 
+        datadir : root of data 
+        class_name : the name of category 
     Example:
         df = get_df(
-                datadir       = datadir ,
-                class_name    = class_name,
-                anomaly_ratio = anomaly_ratio
-            )
+                datadir       = './Data' , 
+                class_name    = 'toothbrush'
+            ) 
     '''
-    
     # get img_dirs dataframe 
     img_dirs = get_img_dirs(datadir=datadir, class_name=class_name)
     
     # train test split
     df = train_test_split(                
-        img_dirs            = img_dirs,
-        train_anomaly_ratio = anomaly_ratio
+        img_dirs            = img_dirs
         )
-    
-    if method == 'PatchCore':
-        length_train = len(df[df['train/test'] == 'train'])
-        length_test = int(length_train * (1-params['normal_ratio']))
-        index_test = df[df['train/test'] == 'train'].sample(length_test).index
-        df.loc[index_test,'train/test'] = 'test'
-        
-    elif method == 'STPM':
-        # train valid split, valid is 20% of train
-        length_train = len(df[df['train/test'] == 'train'])
-        length_valid = int(length_train*0.2)
-        index_valid = df[df['train/test'] == 'train'].sample(length_valid).index
-        df.loc[index_valid,'train/test'] = 'valid'
-    
     return df 
 
     
 
 def get_img_dirs(datadir:str, class_name:str) -> pd.DataFrame:
+    '''
+        디렉토리 내 이미지 디렉토리들을 가져오는 메소드 
+    '''
     class_name = '*' if class_name =='all' else class_name 
     
     img_dirs = pd.Series(sorted(glob(os.path.join(datadir,'MVTecAD', class_name,'*/*/*.png'))))
@@ -124,21 +112,12 @@ def get_img_dirs(datadir:str, class_name:str) -> pd.DataFrame:
     return img_dirs 
 
 
-def train_test_split(img_dirs:pd.DataFrame, train_anomaly_ratio:float) -> pd.DataFrame:
+def train_test_split(img_dirs:pd.DataFrame) -> pd.DataFrame:
+    '''
+        Anomaly Ratio에 따라 Train/Test를 다시 구성하는 코드 
+        추후 Test 셋은 고정한 상태에서 Train/Test 구성하도록 수정할 예정 
+    '''
     img_dirs['train/test'] = img_dirs[0].apply(lambda x : x.split('/')[-3]) # allocate initial train/test label 
-    if train_anomaly_ratio == 0:
-        pass 
-    else:
-        # compute the number of data for each label initially
-        n_train =  len(img_dirs[img_dirs['train/test'] == 'train']) 
-        
-        # compute the number of data swaping btw train and test 
-        n_train_anomaly = int(n_train * train_anomaly_ratio)
-        i_train_anomaly = img_dirs[(img_dirs['train/test'] == 'test') & (img_dirs['anomaly'] == 1)].sample(n_train_anomaly).index # test anomaly -> train 
-        i_test_normal = img_dirs[(img_dirs['train/test'] == 'train') & (img_dirs['anomaly'] == 0)].sample(n_train_anomaly).index # train normal -> test 
-        
-        img_dirs.loc[i_train_anomaly,'train/test'] = 'train'
-        img_dirs.loc[i_test_normal, 'train/test'] = 'test'
     
     return img_dirs 
 
