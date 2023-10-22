@@ -14,11 +14,11 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from collections import OrderedDict
 from accelerate import Accelerator
+import pickle 
 
-from sklearn.metrics import roc_auc_score, auc
-from skimage import measure
-from statistics import mean
 from omegaconf import OmegaConf
+
+from ignite.contrib import metrics 
 
 
 _logger = logging.getLogger('train')
@@ -39,101 +39,16 @@ class AverageMeter:
         self.sum += val * n
         self.count += n
         self.avg = self.sum / self.count
-        
-def compute_pro(masks: np.ndarray, amaps: np.ndarray, num_th: int = 200) -> None:
-
-    """Compute the area under the curve of per-region overlaping (PRO) and 0 to 0.3 FPR
-    Args:
-        category (str): Category of product
-        masks (ndarray): All binary masks in test. masks.shape -> (num_test_data, h, w)
-        amaps (ndarray): All anomaly maps in test. amaps.shape -> (num_test_data, h, w)
-        num_th (int, optional): Number of thresholds
-    """
-
-    assert isinstance(amaps, np.ndarray), "type(amaps) must be ndarray"
-    assert isinstance(masks, np.ndarray), "type(masks) must be ndarray"
-    assert amaps.ndim == 3, "amaps.ndim must be 3 (num_test_data, h, w)"
-    assert masks.ndim == 3, "masks.ndim must be 3 (num_test_data, h, w)"
-    assert amaps.shape == masks.shape, "amaps.shape and masks.shape must be same"
-    #assert set(masks.flatten()) == {0, 1}, "set(masks.flatten()) must be {0, 1}"
-    assert isinstance(num_th, int), "type(num_th) must be int"
-
-    df = pd.DataFrame([], columns=["pro", "fpr", "threshold"])
-    binary_amaps = np.zeros_like(amaps, dtype=np.bool)
-
-    min_th = amaps.min()
-    max_th = amaps.max()
-    delta = (max_th - min_th) / num_th
-
-    for i,th in enumerate(np.arange(min_th, max_th, delta)):
-        binary_amaps[amaps <= th] = 0
-        binary_amaps[amaps > th] = 1
-
-        pros = []
-        for binary_amap, mask in zip(binary_amaps, masks):
-            for region in measure.regionprops(measure.label(mask)):
-                axes0_ids = region.coords[:, 0]
-                axes1_ids = region.coords[:, 1]
-                tp_pixels = binary_amap[axes0_ids, axes1_ids].sum()
-                pros.append(tp_pixels / region.area)
-
-        inverse_masks = 1 - masks
-        fp_pixels = np.logical_and(inverse_masks, binary_amaps).sum()
-        fpr = fp_pixels / inverse_masks.sum()
-
-        
-        df.loc[i,:] = [mean(pros),fpr,th]
-    # Normalize FPR from 0 ~ 1 to 0 ~ 0.3
-    df = df[df["fpr"] < 0.3]
-    df["fpr"] = df["fpr"] / df["fpr"].max()
-
-    pro_auc = auc(df["fpr"], df["pro"])
-    return pro_auc        
-     
-
-def cal_metrics(true_labels:np.ndarray, score_maps:np.ndarray, gts=None, aupro: bool = False):
-    # Image Level AUROC 
-    size = score_maps.shape[0]
-    image_level_score = score_maps.reshape(size,-1).max(1)
-    image_auroc = roc_auc_score(true_labels, image_level_score)
-
-    # Pixel Level AUROC 
-    # preprocess score for pixel 
-    pixel_score = np.transpose(score_maps,(0,2,3,1))
-    # pixel_score = np.array([np.expand_dims(cv2.resize(score, dsize=(img_size,img_size)), axis=2) for score in pixel_score])
-    
-    # preprocess gt for pixel 
-    gts = np.transpose(gts, (0,2,3,1))
-    gts = np.array([cv2.cvtColor(gt, cv2.COLOR_BGR2GRAY) for gt in gts])
-    
-    # cal pixel auroc score 
-    pixel_auroc = roc_auc_score(gts.flatten(), pixel_score.flatten())
-    
-    if aupro:
-        # Pixel Level AUPRO 
-        aupro = compute_pro(gts, pixel_score.squeeze(3))
-        return {
-            'image_auroc' : image_auroc, 
-            'pixel_auroc' : pixel_auroc, 
-            'aupro' : aupro
-        }
-    else:
-        return {
-            'image_auroc' : image_auroc, 
-            'pixel_auroc' : pixel_auroc
-        }
-    
-
+             
 
 def metric_logging(savedir, use_wandb, 
                     r, epoch, step,epoch_time_m,
-                    optimizer, train_metrics, valid_metrics, test_metrics):
+                    optimizer, train_metrics, test_metrics):
     
     metrics = OrderedDict(round=r)
     metrics.update([('epoch', epoch)])
     metrics.update([('lr',round(optimizer.param_groups[0]['lr'],5))])
     metrics.update([('train_' + k, round(v,4)) for k, v in train_metrics.items()])
-    metrics.update([('valid_' + k, round(v,4)) for k, v in valid_metrics.items()])
     metrics.update([('test_' + k, round(v,4)) for k, v in test_metrics.items()])
     metrics.update([('epoch time',round(epoch_time_m.val,4))])
     
@@ -142,7 +57,6 @@ def metric_logging(savedir, use_wandb,
     if use_wandb:
         wandb.log(metrics, step=step)
     
-
 
 def train(model, dataloader, optimizer, accelerator: Accelerator, log_interval: int) -> dict:
     '''
@@ -156,18 +70,19 @@ def train(model, dataloader, optimizer, accelerator: Accelerator, log_interval: 
     end = time.time()
     
     model.train()
-    optimizer.zero_grad()
+
     for idx, (images, _, _) in enumerate(dataloader):        
         data_time_m.update(time.time() - end)
         
         # predict
-        loss = model(images)
+        output = model(images)
+        loss   = model.criterion(output)
 
         # loss update
         if model.__class__.__name__ not in ['PatchCore']:
+            optimizer.zero_grad()
             accelerator.backward(loss)
             optimizer.step()
-            optimizer.zero_grad()
             
         losses_m.update(loss.item())            
         
@@ -188,9 +103,7 @@ def train(model, dataloader, optimizer, accelerator: Accelerator, log_interval: 
                             rate       = images[0].size(0) / batch_time_m.val,
                             rate_avg   = images[0].size(0) / batch_time_m.avg,
                             data_time  = data_time_m
-                            ))
-                
-
+                            ))                
         end = time.time()
         
     # logging metrics
@@ -199,105 +112,51 @@ def train(model, dataloader, optimizer, accelerator: Accelerator, log_interval: 
     train_result = {'loss' : losses_m.avg}
     return train_result 
 
-@torch.no_grad()
-def validation(model, dataloader) -> dict:
-    batch_time_m = AverageMeter()
-    data_time_m = AverageMeter()
-    losses_m = AverageMeter()
+def test(model, dataloader) -> dict:    
     
-    end = time.time()
-    if model.__class__.__name__ != 'PatchCore':
-        model.eval()
-        for idx, (images, _, _) in enumerate(dataloader):   
-            data_time_m.update(time.time() - end)     
-            
-            # predict
-            loss = model(images)
-            losses_m.update(loss.item())    
-            
-            # batch time
-            batch_time_m.update(time.time() - end)
-            
-            
-            _logger.info('Valid [{:>4d}/{}] Loss: {loss.val:>6.4f} ({loss.avg:>6.4f}) '
-                        'Time: {batch_time.val:.3f}s, {rate:>7.2f}/s ({batch_time.avg:.3f}s, {rate_avg:>7.2f}/s) '
-                        'Data: {data_time.val:.3f} ({data_time.avg:.3f})'.format(
-                        (idx+1), 
-                        len(dataloader),
-                        loss       = losses_m, 
-                        batch_time = batch_time_m,
-                        rate       = images[0].size(0) / batch_time_m.val,
-                        rate_avg   = images[0].size(0) / batch_time_m.avg,
-                        data_time  = data_time_m
-                        ))
-            
-        valid_result = {'loss' : losses_m.avg}
-    else: # In case PatchCore 
-        '''
-        Patchcore forward 의 return을 0으로 해놔서 따로 안 빼도 될 듯 싶지만 일단 킵, 추후 수정 
-        '''
-        valid_result = {'loss' : 0}
-    return valid_result
-
-@torch.no_grad()
-def test(model, dataloader, aupro:bool = False) -> dict:
-    losses_m = AverageMeter()
-    
-    true_labels = [] 
-    score_list = [] 
-    true_gts = []
-    
-    if model.__class__.__name__ != 'PatchCore':
-        model.eval()
-    else:
+    if model.__class__.__name__ == 'PatchCore':
         model.eval(next(model.parameters()).device) #Patchcore의 경우 embedding들에게 device를 할당해주어야 함 
+    else:
+        model.eval()
+        
+    pixel_auroc = metrics.ROC_AUC()
+    image_auroc = metrics.ROC_AUC()
         
     for idx, (images, labels, gts) in enumerate(dataloader):
         
         # predict
-        if model.__class__.__name__ != 'PatchCore':
-            loss, outputs = model(images, only_loss = False)            
-            losses_m.update(loss.item())       
-            score = model.get_score_map(outputs)
-        else:
-            _, score = model.get_score_map(images)
-            losses_m.update(0)
+        with torch.no_grad():
+            if model.__class__.__name__ == 'PatchCore':
+                score, score_map = model.get_score_map(images)
+            else:
+                outputs = model(images)   
+                score_map = model.get_score_map(outputs).detach().cpu()
+                score = score_map.reshape(score_map.shape[0],-1).max(-1)[0]
         
-        # Stack Scoring for image level 
-        true_labels.append(labels.detach().cpu().numpy())
-        score_list.append(score.detach().cpu().numpy())
-        true_gts.append(gts.detach().cpu().numpy())
+        # Stack Scoring for auroc 
+        pixel_auroc.update((score_map.flatten(), gts.flatten()))
+        image_auroc.update((score, labels))
         
-        # Stack scoring for pixel level 
+        # Calculate results of evaluation 
+        
+    p_auroc = pixel_auroc.compute()
+    i_auroc = image_auroc.compute()
             
-            
-    metric_results = cal_metrics(
-        true_labels = np.concatenate(true_labels),
-        score_maps  = np.concatenate(score_list),
-        gts         = np.concatenate(true_gts),
-        aupro       = aupro
-        )
-    
     # logging metrics
-    if aupro:
-        _logger.info('TEST: Loss: %.3f | Image AUROC: %.3f%%| Pixel AUROC: %.3f%% | Pixel AUPRO: %.3f%%' % (
-            losses_m.avg, metric_results['image_auroc'], metric_results['pixel_auroc'], aupro))
-    else:
-        _logger.info('TEST: Loss: %.3f | Image AUROC: %.3f%%| Pixel AUROC: %.3f%%' % (
-            losses_m.avg, metric_results['image_auroc'], metric_results['pixel_auroc']))
+    _logger.info('Image AUROC: %.3f%%| Pixel AUROC: %.3f%%' % (i_auroc,p_auroc))
     
-    test_result = OrderedDict(loss = losses_m.avg)
-    test_result.update([(k, round(v,4)) for k, v in metric_results.items()])
-
+    test_result = OrderedDict(image_auroc = i_auroc)
+    test_result.update([('pixel_auroc', round(p_auroc,4))])
+    
     return test_result 
 
 
 def fit(
-    model, trainloader, validloader, testloader, optimizer, scheduler, accelerator: Accelerator,
-    r :int, epochs: int, use_wandb: bool, log_interval: int, seed: int = None, savedir: str = None
-) -> None:
+    model, trainloader, testloader, optimizer, scheduler, accelerator: Accelerator,
+    n_round :int, epochs: int, use_wandb: bool, log_interval: int, seed: int = None, savedir: str = None
+    ):
 
-    best_score = np.inf
+    best_score = 0.0
     epoch_time_m = AverageMeter()
     end = time.time() 
     
@@ -310,17 +169,11 @@ def fit(
             optimizer    = optimizer, 
             accelerator  = accelerator, 
             log_interval = log_interval
-        )
-        
-        valid_metrics = validation(
-            model        = model,
-            dataloader   = validloader
-        )
+        )        
         
         test_metrics = test(
             model        = model, 
-            dataloader   = testloader,
-            aupro        = False 
+            dataloader   = testloader
         )
         
         epoch_time_m.update(time.time() - end)
@@ -331,36 +184,26 @@ def fit(
         
         # logging 
         metric_logging(
-            savedir = savedir, use_wandb = use_wandb, r = r, epoch = epoch, step = step,
+            savedir = savedir, use_wandb = use_wandb, r = n_round, epoch = epoch, step = step,
             optimizer = optimizer, epoch_time_m = epoch_time_m,
-            train_metrics = train_metrics, valid_metrics = valid_metrics, test_metrics = test_metrics
+            train_metrics = train_metrics, test_metrics = test_metrics
         )
                 
-        # checkpoint - save best results and model weights
-        ckp_cond = best_score > valid_metrics['loss']
-        if savedir and ckp_cond:
-            best_score = valid_metrics['loss']
-            best_step = step 
-            torch.save(model.state_dict(), os.path.join(savedir, f'model_seed{seed}_best.pt'))
-        
-    # Evaluation best checkpoint 
-    best_weight = torch.load(os.path.join(savedir, f'model_seed{seed}_best.pt'))
-    model.load_state_dict(best_weight)
+        # checkpoint - save best results and model weights        
+        if best_score < test_metrics['image_auroc']:
+            best_score = test_metrics['image_auroc']
+            print(f" New best score : {best_score} | best epoch : {epoch}")
+            torch.save(model.state_dict(), os.path.join(savedir, f'model_best.pt')) 
+            
+            
+            
     
-    test_metrics = test(
-            model        = model, 
-            dataloader   = testloader,
-            aupro        = True
-        )
-    
-    state = {'best_step': best_step,
-                'test'  : test_metrics}
-    json.dump(state, open(os.path.join(savedir, f'results_seed{seed}_best.json'), 'w'), indent='\t')
+    return model 
         
 def refinement_run(
     exp_name: str, 
-    method: str, model_name: str, model_params: dict,
-    trainset, validset, testset,
+    method: str, backbone: str, model_params: dict,
+    trainset, testset,
     nb_round: int,
     batch_size: int, test_batch_size: int, num_workers: int, 
     opt_name: str, lr: float, opt_params: dict, 
@@ -369,15 +212,12 @@ def refinement_run(
     savedir: str, seed: int, accelerator: Accelerator, cfg: dict = None):
     
     assert cfg != None if use_wandb else True, 'If you use wandb, configs should be exist.'
-    
-    # set active learning arguments
-
-    
+        
     # logging
     
     # create model 
     model = __import__('models').__dict__[method](
-        model_name = model_name,
+        backbone = backbone,
         **model_params
         )    
     
@@ -386,14 +226,7 @@ def refinement_run(
         dataset     = trainset,
         batch_size  = batch_size,
         num_workers = num_workers
-    )
-    
-    validloader = DataLoader(
-        dataset     = validset,
-        batch_size  = test_batch_size,
-        shuffle     = False,
-        num_workers = num_workers
-    )
+    )    
     
     # define test dataloader
     testloader = DataLoader(
@@ -411,15 +244,15 @@ def refinement_run(
         optimizer = __import__('torch.optim', fromlist='optim').__dict__[opt_name](model.parameters(), lr=lr, **opt_params)
 
         # scheduler
-        if scheduler_name:
+        if scheduler_name is not None:
             scheduler = __import__('torch.optim.lr_scheduler', fromlist='lr_scheduler').__dict__[scheduler_name](optimizer, **scheduler_params)
         else:
             scheduler = None
         
         
         # # prepraring accelerator
-        model, optimizer, trainloader, validloader, testloader, scheduler = accelerator.prepare(
-            model, optimizer, trainloader, validloader, testloader, scheduler
+        model, optimizer, trainloader, testloader, scheduler = accelerator.prepare(
+            model, optimizer, trainloader, testloader, scheduler
         )
         
         # initialize wandb
@@ -427,20 +260,23 @@ def refinement_run(
             wandb.init(name=f'{exp_name}_round{r}', project=cfg.TRAIN.wandb.project_name, config=OmegaConf.to_container(cfg))
 
         # fitting model
-        fit(
+        last_model = fit(
             model        = model, 
             trainloader  = trainloader, 
-            validloader  = validloader,
             testloader   = testloader, 
             optimizer    = optimizer, 
             scheduler    = scheduler,
             accelerator  = accelerator,
-            r            = r,
+            n_round      = r,
             epochs       = epochs, 
             use_wandb    = use_wandb,
             log_interval = log_interval,
             savedir      = savedir ,
             seed         = seed 
         )        
-                
+        
         wandb.finish()
+        
+    torch.save(last_model.state_dict(),os.path.join(savedir, f'model_last.pt'))
+    
+                
