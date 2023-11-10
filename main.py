@@ -54,7 +54,7 @@ def run(cfg):
         std           = cfg.DATASET.std,
         aug_info      = cfg.DATASET.aug_info,
         **cfg.DATASET.get('params',{})
-    )
+    )    
     
     # make save directory
     savedir = os.path.join(
