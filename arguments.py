@@ -55,16 +55,16 @@ def str_to_int(value):
         return False, value
     
 def get_parser():
-    parser = argparse.ArgumentParser(description='UAADF')
-    parser.add_argument('--default_setting', type=str, default=None, help='default config file')
-    parser.add_argument(
+    parse = argparse.ArgumentParser(description='UAADF')
+    parse.add_argument('--default_setting', type=str, default=None, help='default config file')
+    parse.add_argument(
         "opts",
         help="Modify config options using the command-line",
         default=None,
         nargs=argparse.REMAINDER,
     )
 
-    args = parser.parse_args()
+    args = parse.parse_args()
     return args 
 
 def parser(jupyter:bool = False, default_setting:str = None):
@@ -81,6 +81,7 @@ def parser(jupyter:bool = False, default_setting:str = None):
     
     # update cfg
     if not jupyter:
+
         for k, v in zip(args.opts[0::2], args.opts[1::2]):
             if k == 'DEFAULT.exp_name':
                 cfg.DEFAULT.exp_name = f'{cfg.DEFAULT.exp_name}-{v}'
@@ -89,9 +90,10 @@ def parser(jupyter:bool = False, default_setting:str = None):
                 
     # Update experiment name
     if cfg.MODEL.method == 'PatchCore':
-        cfg.DEFAULT.exp_name = f"{cfg.DEFAULT.exp_name}-coreset_ratio_{cfg.MODEL.params.coreset_sampling_ratio}-anomaly_ratio_{cfg.DATASET.anomaly_ratio}" 
+        cfg.DEFAULT.exp_name = f"{cfg.DEFAULT.exp_name}-coreset_ratio_{cfg.MODEL.params.coreset_sampling_ratio}-anomaly_ratio_{cfg.DATASET.params.anomaly_ratio}" 
     else:
-        cfg.DEFAULT.exp_name = f"{cfg.DEFAULT.exp_name}-anomaly_ratio_{cfg.DATASET.anomaly_ratio}" 
+        cfg.DEFAULT.exp_name = f"{cfg.DEFAULT.exp_name}-anomaly_ratio_{cfg.DATASET.params.anomaly_ratio}" 
+        
        
     # load dataset statistics
     if cfg.DATASET.dataset_name == 'MVTecAD':
@@ -99,7 +101,6 @@ def parser(jupyter:bool = False, default_setting:str = None):
         #cfg.DATASET.update(stats.datasets[cfg.DATASET.class_name])
     else:    
         cfg.DATASET.update(stats.datasets[cfg.DATASET.dataset_name])
-    
     #print(OmegaConf.to_yaml(cfg))
     
     return cfg  
