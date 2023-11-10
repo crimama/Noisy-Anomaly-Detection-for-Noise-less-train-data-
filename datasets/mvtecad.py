@@ -42,6 +42,8 @@ class MVTecAD(Dataset):
         # Image 
         self.transform = transform 
         
+        self.name = 'MVTecAD'
+        
     def _get_ground_truth(self, img_dir, img):
         img_dir = img_dir.split('/')
         if img_dir[-2] !='good':
@@ -77,11 +79,12 @@ class MVTecAD(Dataset):
         
         
 
-def get_df(datadir: str, class_name: str):
+def get_df(datadir: str, class_name: str, baseline: bool = True, anomaly_ratio: float = 0.0):
     '''
     args:
         datadir : root of data 
         class_name : the name of category 
+        baseline : dataset for reproduce performance of baseline if True or dataset for experiment of fully unsupervised 
     Example:
         df = get_df(
                 datadir       = './Data' , 
@@ -90,11 +93,16 @@ def get_df(datadir: str, class_name: str):
     '''
     # get img_dirs dataframe 
     img_dirs = get_img_dirs(datadir=datadir, class_name=class_name)
+    img_dirs['train/test'] = img_dirs[0].apply(lambda x : x.split('/')[-3]) # allocate initial train/test label 
     
-    # train test split
-    df = train_test_split(                
-        img_dirs            = img_dirs
-        )
+    if baseline:
+        df = img_dirs
+    else:
+        # train test split
+        df = train_test_split(                
+            df      = img_dirs,
+            anomaly_ratio = anomaly_ratio
+            )
     return df 
 
     
@@ -111,15 +119,33 @@ def get_img_dirs(datadir:str, class_name:str) -> pd.DataFrame:
     img_dirs['train/test'] = ''
     return img_dirs 
 
-
-def train_test_split(img_dirs:pd.DataFrame) -> pd.DataFrame:
-    '''
-        Anomaly Ratio에 따라 Train/Test를 다시 구성하는 코드 
-        추후 Test 셋은 고정한 상태에서 Train/Test 구성하도록 수정할 예정 
-    '''
-    img_dirs['train/test'] = img_dirs[0].apply(lambda x : x.split('/')[-3]) # allocate initial train/test label 
+def train_test_split(df, anomaly_ratio):
     
-    return img_dirs 
+    num_train = len(df[df['train/test'] == 'train'])
+    num_max_anomaly = int(num_train * 0.1)
+    num_anomaly_train = int(num_train*anomaly_ratio)
+
+    # test 데이터 중 train으로 사용 될 후보군 sampling 
+    unfix_anomaly_index = df[(df['train/test'] == 'test') & (df['anomaly'] == 1)].sample(num_max_anomaly).index
+    df.loc[unfix_anomaly_index, 'train/test'] = 'unfix'
+
+    # train으로 사용될 후보군 제외 후 test 셋 고정 
+    fix_test = df[(df['train/test'] == 'test')].reset_index(drop=True)
+
+    # train의 anomaly 수 만큼 sampling 후 trainset에서 제외 
+    notuse_train_normal = df[df['train/test']=='train'].sample(num_anomaly_train).index
+    df.loc[notuse_train_normal,'train/test'] = 'notuse'
+
+    # train 의 anomaly 수 만큼 후보군에서 sampling 및 train에 추가 
+    train_anomaly_index = df[df['train/test']=='unfix'].sample(num_anomaly_train).index
+    df.loc[train_anomaly_index,'train/test'] = 'train'
+
+    # train 셋 고정 
+    fix_train = df[df['train/test']=='train'].reset_index(drop=True)
+
+    final_df = pd.concat([fix_train, fix_test]).reset_index(drop=True)
+    
+    return final_df 
 
 
         
