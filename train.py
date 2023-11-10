@@ -73,7 +73,6 @@ def train(model, dataloader, optimizer, accelerator: Accelerator, log_interval: 
 
     for idx, (images, _, _) in enumerate(dataloader):        
         data_time_m.update(time.time() - end)
-        
         # predict
         output = model(images)
         loss   = model.criterion(output)
@@ -139,14 +138,19 @@ def test(model, dataloader) -> dict:
         
         # Calculate results of evaluation 
         
-    p_auroc = pixel_auroc.compute()
+    if dataloader.dataset.name != 'CIFAR10':
+        p_auroc = pixel_auroc.compute()
     i_auroc = image_auroc.compute()
             
     # logging metrics
-    _logger.info('Image AUROC: %.3f%%| Pixel AUROC: %.3f%%' % (i_auroc,p_auroc))
-    
+    if dataloader.dataset.name != 'CIFAR10':
+        _logger.info('Image AUROC: %.3f%%| Pixel AUROC: %.3f%%' % (i_auroc,p_auroc))
+    else:
+        _logger.info('Image AUROC: %.3f%%' % (i_auroc))
+        
     test_result = OrderedDict(image_auroc = i_auroc)
-    test_result.update([('pixel_auroc', round(p_auroc,4))])
+    if dataloader.dataset.name != 'CIFAR10':
+        test_result.update([('pixel_auroc', round(p_auroc,4))])
     
     return test_result 
 
@@ -186,16 +190,17 @@ def fit(
         metric_logging(
             savedir = savedir, use_wandb = use_wandb, r = n_round, epoch = epoch, step = step,
             optimizer = optimizer, epoch_time_m = epoch_time_m,
-            train_metrics = train_metrics, test_metrics = test_metrics
-        )
+            train_metrics = train_metrics, test_metrics = test_metrics)
+        
+        # if epoch%49 == 0:
+        #     torch.save(model.state_dict(), os.path.join(savedir, f'model_{epoch}.pt')) 
                 
         # checkpoint - save best results and model weights        
         if best_score < test_metrics['image_auroc']:
             best_score = test_metrics['image_auroc']
             print(f" New best score : {best_score} | best epoch : {epoch}")
             torch.save(model.state_dict(), os.path.join(savedir, f'model_best.pt')) 
-            
-            
+                    
             
     
     return model 
@@ -225,7 +230,8 @@ def refinement_run(
     trainloader = DataLoader(
         dataset     = trainset,
         batch_size  = batch_size,
-        num_workers = num_workers
+        num_workers = num_workers,
+        shuffle     = True 
     )    
     
     # define test dataloader
