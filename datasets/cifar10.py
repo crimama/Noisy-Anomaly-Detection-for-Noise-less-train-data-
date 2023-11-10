@@ -1,48 +1,80 @@
-import os 
+import pandas as pd 
 import numpy as np 
-from torch.utils.data import Dataset 
+from typing import  Callable, Optional
+
+import torch 
 from torchvision import datasets 
 
-class CIFAR10(Dataset):
-    def __init__(self, normal_label: int, datadir: str, transform,  anomaly_ratio: float = 0, train_mode: bool = False):
-        super(Dataset,self).__init__() 
-        self.normal_label = normal_label 
+class CIFAR10(datasets.CIFAR10):
+    def __init__(
+        self,
+        root: str,
+        class_name: str,
+        anomaly_ratio: float,
+        baseline: bool = True,
+        train: bool = True,
+        transform: Optional[Callable] = None,
+        target_transform: Optional[Callable] = None,
+        download: bool = False,
+        ) -> None:
+        super(CIFAR10, self).__init__(
+            root = root,
+            train = train,
+            transform = transform,
+            target_transform = target_transform,
+            download = download 
+        )
         
-        if train_mode:
-            self.data, self.targets = self._get_anomaly(
-                dataset       = datasets.CIFAR10(root = os.path.join(datadir,'CIFAR10'), train = train_mode, download  = True, transform = None),
-                anomaly_ratio = anomaly_ratio
-            )
+        self.baseline = baseline 
+        self.class_name = class_name 
+        self.anomaly_ratio = anomaly_ratio
+        self.name = 'CIFAR10'
+        
+        if self.baseline:
+            self.set_base(class_name)            
         else:
-            dataset = datasets.CIFAR10(root = os.path.join(datadir,'CIFAR10'), train = train_mode, download  = True, transform = None)
-            self.data, self.targets = dataset.data, dataset.targets 
+            self.set_fully_unsu(anomaly_ratio, class_name)
             
-        self.transform = transform 
-        
     def __len__(self):
-        return len(self.dataset)
+        return len(self.data)    
     
-    def _get_anomaly(self, dataset, anomaly_ratio):
-        # Get Normal/Anomaly Index 
-        normal_index = np.where(np.array(dataset.targets) == 0 )[0]
-        anomaly_index = np.where(np.array(dataset.targets) != 0 )[0]
-
-        # Get the number of Normal/Anomaly required
-        use_index = [] 
-        num_anomaly = int(len(normal_index) * anomaly_ratio)
-        num_normal = len(normal_index) - num_anomaly # Swap btw Anomaly - Normal 
         
-        # Get index for training 
-        use_index.append(np.random.choice(normal_index, num_normal, replace=False))
-        use_index.append(np.random.choice(anomaly_index, num_anomaly, replace=False))
-        use_index = np.concatenate(use_index).astype(int)
-        return dataset.data[use_index], np.array(dataset.targets)[use_index]
-    
-    def __getitem__(self, idx): 
-        Image, Label = self.data[idx], self.targets[idx]
+    def __getitem__(self, idx):
+        img = self.data[idx]
+        img = self.transform(img)
         
-        # preprocess 
-        Image = self.transform(Image)
-        Label = 0 if Label == self.normal_label else 1 
+        gt = torch.zeros_like(img)
         
-        return Image, Label 
+        label = self.targets[idx]
+        
+        return img, label, gt
+            
+    def set_fully_unsu(self, anomaly_ratio, class_name):
+        if self.train:
+            num_train = 5000 # 50000 * 0.1 
+            num_anomaly_train = int(num_train * anomaly_ratio)
+            
+            # anomaly 데이터 중 train에 포함 시킬 데이터 인덱스 sampling 
+            index_anomaly_train = pd.Series(self.targets)[pd.Series(self.targets) != class_name].sample(num_anomaly_train).index
+            
+            # 전체 train 데이터 중 class에 해당하는 데이터만 샘플링 + 이상치를 추가할 만큼 제외 한 뒤 샘플링
+            index_normal_train = pd.Series(np.where(np.array(self.targets) == class_name)[0]).sample(num_train - num_anomaly_train).values
+            
+            index_train = np.concatenate([index_normal_train, index_anomaly_train])
+            self.data = self.data[index_train]
+            self.targets = np.array(self.targets)[index_train]
+            self.targets = pd.Series(self.targets).apply(lambda x : 0 if x == class_name else 1 ).values 
+        else:
+            self.targets = pd.Series(self.targets).apply(lambda x : 0 if x == class_name else 1 ).values 
+                            
+                                                
+    def set_base(self, class_name):
+        if self.train:
+            self.data = self.data[np.where(np.array(self.targets) == class_name)[0]]
+            self.targets = np.array(self.targets)[np.where(np.array(self.targets) == class_name)[0]]     
+            self.targets = pd.Series(self.targets).apply(lambda x : 0 if x == class_name else 1 ).values     
+        else:
+            self.targets = pd.Series(self.targets).apply(lambda x : 0 if x == class_name else 1 ).values        
+            
+        
+        
