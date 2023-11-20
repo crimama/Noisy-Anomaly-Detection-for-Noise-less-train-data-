@@ -86,7 +86,7 @@ def run(cfg):
         testset          = testset,
         
         # Refinement 
-        nb_round         = 1,
+        nb_round         = cfg.REFINEMENT.nb_round,
 
         # Train
         batch_size       = cfg.DATASET.batch_size,
