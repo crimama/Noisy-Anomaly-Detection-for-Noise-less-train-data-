@@ -3,20 +3,23 @@ from scipy import stats
 
 import torch 
 import numpy as np 
-from torch.utils.data import DataLoader 
+from torch.utils.data import DataLoader, SubsetRandomSampler
+
+from .sampler import SubsetSequentialSampler
 
 class Refinementer:
-    def __init__(self, model, n_query: int, dataset, labeled_idx: np.ndarray, batch_size: int,
-                 num_workers: int, sampler):
+    def __init__(self, model, n_query: int, dataset, unrefined_idx: np.ndarray, 
+                 batch_size: int, test_transform, num_workers: int):
         
         self.model = model 
         self.n_query = n_query 
         self.dataset = dataset 
-        self.labeled_idx = labeled_idx 
+        self.unrefined_idx = unrefined_idx 
         self.batch_size = batch_size 
         self.num_workers = num_workers
-        self.sampler = sampler         
+        self.test_transform = test_transform 
         
+    
     def init_model(self):
         return deepcopy(self.model)    
     
@@ -24,21 +27,32 @@ class Refinementer:
         '''
         Create new DataLoader getting new query 
         '''        
-        self.labeled_idx[query_idx] = False 
+        self.unrefined_idx[query_idx] = False 
         
         dataloader = DataLoader(
             dataset     = self.dataset,
             batch_size  = self.batch_size,
-            sampler     = self.sampler(indices = np.where(self.labeled_idx==True)[0]),
+            sampler     = SubsetRandomSampler(indices = np.where(self.unrefined_idx==True)[0]),
             num_workers = self.num_workers
         )
         return dataloader 
     
-    def get_grad_embedding(self, model, dataloader):
+    def get_grad_embedding(self, model, unrefined_idx: np.ndarray) -> torch.Tensor:
+        
+        dataset = deepcopy(self.dataset)
+        dataset.transform = self.test_transform 
+        device = next(model.parameters()).device 
+        
+        dataloader = DataLoader(
+            dataset     = dataset,
+            batch_size  = self.batch_size, 
+            sampler     = SubsetSequentialSampler(indices=unrefined_idx),
+            num_workers = self.num_workers
+        )
         
         grad_embeddings = []
         for imgs, _, _ in dataloader:
-            output = model(imgs)
+            output = model(imgs.to(device))
             loss = model.criterion(output)
             grads = torch.autograd.grad(loss, output[1])
             grad_embeddings.append(
@@ -47,10 +61,15 @@ class Refinementer:
         grad_embeddings = torch.vstack(grad_embeddings)
         return grad_embeddings 
     
-    def query(self, model, trainloader):
-        grad_embeddings = self.get_grad_embedding(model, trainloader)
+    def query(self, model):
+        unrefined_idx = np.where(self.unrefined_idx==True)[0]
+        
+        grad_embeddings = self.get_grad_embedding(model, unrefined_idx)
         chosen = init_centers(X = grad_embeddings, K = self.n_query)
         return chosen 
+    
+    
+        
                                         
                                         
 @torch.no_grad()

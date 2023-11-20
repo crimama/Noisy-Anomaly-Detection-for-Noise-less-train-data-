@@ -233,16 +233,16 @@ def refinement_run(
     
     
     refinement = Refinementer(
-        model       = __import__('models').__dict__[method](
-                        backbone = backbone,
-                        **model_params
-                        ),
-        n_query     = cfg.REFINEMENT.n_query,
-        dataset     = trainset,
-        labeled_idx = np.ones(len(trainset)).astype(np.bool8),
-        batch_size  = batch_size,
-        num_workers = num_workers,
-        sampler     = SubsetSequentialSampler
+        model          = __import__('models').__dict__[method](
+                           backbone = backbone,
+                           **model_params
+                           ),
+        n_query        = cfg.REFINEMENT.n_query,
+        dataset        = trainset,
+        unrefined_idx  = np.ones(len(trainset)).astype(np.bool8),
+        batch_size     = batch_size,
+        test_transform = testset.transform,
+        num_workers    = num_workers
     )
     
     
@@ -251,7 +251,7 @@ def refinement_run(
         
         if r!= 0:
             # refinement 
-            query_idx = refinement.query(model, trainloader)
+            query_idx = refinement.query(model)
             print(query_idx)
             
             del optimizer, scheduler, trainloader, model        
