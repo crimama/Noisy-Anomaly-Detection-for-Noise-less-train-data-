@@ -6,7 +6,6 @@ import json
 
 import numpy as np
 import pandas as pd
-import cv2 
 
 import torch
 import torch.nn as nn 
@@ -14,12 +13,14 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from collections import OrderedDict
 from accelerate import Accelerator
-import pickle 
+
 
 from omegaconf import OmegaConf
 
 from ignite.contrib import metrics 
 
+from query_strategies.sampler import SubsetSequentialSampler
+from query_strategies.refinement import Refinementer
 
 _logger = logging.getLogger('train')
 
@@ -200,10 +201,6 @@ def fit(
             best_score = test_metrics['image_auroc']
             print(f" New best score : {best_score} | best epoch : {epoch}")
             torch.save(model.state_dict(), os.path.join(savedir, f'model_best.pt')) 
-                    
-            
-    
-    return model 
         
 def refinement_run(
     exp_name: str, 
@@ -216,15 +213,7 @@ def refinement_run(
     epochs: int, log_interval: int, use_wandb: bool, 
     savedir: str, seed: int, accelerator: Accelerator, cfg: dict = None):
     
-    assert cfg != None if use_wandb else True, 'If you use wandb, configs should be exist.'
-        
-    # logging
-    
-    # create model 
-    model = __import__('models').__dict__[method](
-        backbone = backbone,
-        **model_params
-        )    
+    assert cfg != None if use_wandb else True, 'If you use wandb, configs should be exist.'        
     
     # define train dataloader
     trainloader = DataLoader(
@@ -242,9 +231,40 @@ def refinement_run(
         num_workers = num_workers
     )
     
+    
+    refinement = Refinementer(
+        model       = __import__('models').__dict__[method](
+                        backbone = backbone,
+                        **model_params
+                        ),
+        n_query     = cfg.REFINEMENT.n_query,
+        dataset     = trainset,
+        labeled_idx = np.ones(len(trainset)).astype(np.bool8),
+        batch_size  = batch_size,
+        num_workers = num_workers,
+        sampler     = SubsetSequentialSampler
+    )
+    
+    
     # run
     for r in range(nb_round):
-        _logger.info(f'\nRound : [{r}/{nb_round}]')          
+        
+        if r!= 0:
+            # refinement 
+            query_idx = refinement.query(model, trainloader)
+            print(query_idx)
+            
+            del optimizer, scheduler, trainloader, model        
+            accelerator.free_memory()
+            
+            # update query and create new trainloader  
+            trainloader = refinement.update(query_idx)
+            
+        # build new model 
+        model = refinement.init_model()
+            
+        
+        _logger.info(f'\nRound : [{r}/{nb_round}]')     
         
         # optimizer
         optimizer = __import__('torch.optim', fromlist='optim').__dict__[opt_name](model.parameters(), lr=lr, **opt_params)
@@ -266,7 +286,7 @@ def refinement_run(
             wandb.init(name=f'{exp_name}_round{r}', project=cfg.TRAIN.wandb.project_name, config=OmegaConf.to_container(cfg))
 
         # fitting model
-        last_model = fit(
+        fit(
             model        = model, 
             trainloader  = trainloader, 
             testloader   = testloader, 
@@ -279,10 +299,10 @@ def refinement_run(
             log_interval = log_interval,
             savedir      = savedir ,
             seed         = seed 
-        )        
+        )     
         
+        torch.save(model.state_dict(),os.path.join(savedir, f'model_round{r}_last.pt'))                   
         wandb.finish()
         
-    torch.save(last_model.state_dict(),os.path.join(savedir, f'model_last.pt'))
     
                 
