@@ -1,32 +1,25 @@
-
-
-# anomaly_ratio='0 0.05 0.1 0.15'
-# query_strategy='entropy_sampling random_sampling margin_sampling least_confidence'
-# class_name='leather zipper metal_nut wood pill grid tile capsule hazelnut toothbrush screw carpet bottle cable all'
+#anomaly_ratio='0 0.05 0.1 0.15'
+#query_strategy='entropy_sampling random_sampling margin_sampling least_confidence'
 
 gpu_id=$1
-if [ $gpu_id == '0' ];then
-class_name='leather zipper metal_nut wood pill grid tile capsule'
-elif [ $gpu_id == '1' ];then
-class_name='hazelnut toothbrush screw carpet bottle cable transistor'
-fi 
 
+if [ $gpu_id == '0' ]; then
+  class_name='carpet leather tile bottle cable capsule'
+  anomaly_ratio='0.0 0.05 0.1'
+elif [ $gpu_id == '1' ]; then
+  class_name='capsule'
+  anomaly_ratio='0.1'
+else
+  echo "Invalid GPU ID. Please provide a valid GPU ID (0 or 1)."
+fi
 
-# anomaly_ratio='0.02 0.04 0.06 0.08 0.1'
-normal_ratio='0.25'
-anomaly_ratio='0'
-
-for nr in $normal_ratio
+for c in $class_name
 do
-    for r in $anomaly_ratio
-    do
-        for c in $class_name
-        do
-            echo "anomaly_ratio: $r, normal_ratio: $nr class_name: $c"
-            CUDA_VISIBLE_DEVICES=$gpu_id python main.py --default_setting configs/benchmark/patchcore.yaml \
-                        DATASET.anomaly_ratio $r \
-                        DATASET.class_name $c \
-                        DATASET.params.normal_ratio $nr
-        done
-    done
-done
+  for r in $anomaly_ratio
+  do
+    echo "class_name: $c"
+    CUDA_VISIBLE_DEVICES=$gpu_id python main.py --default_setting configs/benchmark/rd_mvtecad.yaml \
+    DATASET.class_name $c \
+    DATASET.params.anomaly_ratio $r
+  done
+done 
