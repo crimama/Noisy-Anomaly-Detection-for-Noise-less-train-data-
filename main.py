@@ -62,7 +62,7 @@ def run(cfg):
                                 cfg.DATASET.dataset_name,
                                 cfg.MODEL.method,
                                 cfg.DATASET.class_name,
-                                cfg.DEFAULT.exp_name,
+                                cfg.DEFAULT.exp_name + '-' + 'n_query_' + str(cfg.REFINEMENT.n_query),
                                 f"seed_{cfg.DEFAULT.seed}"
                             )
     
