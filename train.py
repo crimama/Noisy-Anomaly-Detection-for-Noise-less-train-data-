@@ -201,6 +201,15 @@ def fit(
             best_score = test_metrics['image_auroc']
             print(f" New best score : {best_score} | best epoch : {epoch}")
             torch.save(model.state_dict(), os.path.join(savedir, f'model_best.pt')) 
+
+
+def export_query_result(query_store:list, img_dirs):
+    df = pd.DataFrame(query_store)
+    df.columns = ['round','query']
+    df = df.explode('query').reset_index(drop=True)
+    df['query'] = df['query'].map(int)
+    df['query'] = df['query'].apply(lambda x : img_dirs[x])
+    return df 
         
 def refinement_run(
     exp_name: str, 
@@ -247,12 +256,21 @@ def refinement_run(
     
     
     # run
+    query_store = [] 
     for r in range(nb_round):
         
         if r!= 0:
             # refinement 
             query_idx = refinement.query(model)
             print(query_idx)
+            query_store.append([r-1,query_idx])
+            
+            df = export_query_result(
+                query_store = query_store,
+                img_dirs    = refinement.dataset.img_dirs
+                )
+            
+            df.to_csv(os.path.join(savedir,'query_result.csv'))
             
             del optimizer, scheduler, trainloader, model        
             accelerator.free_memory()
@@ -302,7 +320,5 @@ def refinement_run(
         )     
         
         torch.save(model.state_dict(),os.path.join(savedir, f'model_round{r}_last.pt'))                   
-        wandb.finish()
-        
-    
-                
+        wandb.finish()                            
+
