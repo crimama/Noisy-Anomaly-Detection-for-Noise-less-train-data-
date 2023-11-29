@@ -96,7 +96,7 @@ def parser(jupyter:bool = False, default_setting:str = None):
         
        
     # load dataset statistics
-    if cfg.DATASET.dataset_name == 'MVTecAD':
+    if cfg.DATASET.dataset_name in ['MVTecAD','MVTecLoco']:
         cfg.DATASET.update(stats.datasets['ImageNet'])
         #cfg.DATASET.update(stats.datasets[cfg.DATASET.class_name])
     else:    

@@ -1,15 +1,14 @@
 from glob import glob 
 import os 
-
 import numpy as np 
 import pandas as pd 
-
 import cv2 
-
 import torch 
 from torch.utils.data import Dataset
 
-class MVTecAD(Dataset):
+from .augmentation import train_augmentation, test_augmentation, gt_augmentation  
+
+class MVTecLoco(Dataset):
     '''
     Example 
         df = get_df(
@@ -25,7 +24,7 @@ class MVTecAD(Dataset):
             gt           = True 
         )
     '''
-    def __init__(self, df: pd.DataFrame, train_mode:str, transform, gt_transform, gt=True, idx=False):
+    def __init__(self, df: pd.DataFrame, train_mode:str, transform, gt_transform, gt=True):
         '''
         train_mode = ['train','valid','test']
         '''
@@ -44,13 +43,12 @@ class MVTecAD(Dataset):
         
         self.name = 'MVTecAD'
         
-        self.idx = idx 
-        
     def _get_ground_truth(self, img_dir, img):
         img_dir = img_dir.split('/')
         if img_dir[-2] !='good':
             img_dir[-3] = 'ground_truth'
-            img_dir[-1] = img_dir[-1].split('.')[0] + '_mask.png'
+            img_dir[-1] = img_dir[-1].split('.')[0]
+            img_dir.append('000.png')
             img_dir = '/'.join(img_dir)
             image = cv2.imread(img_dir)
         else:
@@ -74,12 +72,10 @@ class MVTecAD(Dataset):
             gt = self.gt_transform(gt)
             gt = (gt > 0).float()
             
-            if self.idx:
-                return img, label, gt, idx
-            else:
-                return img, label, gt
+            return img, label, gt, idx
         
         else:
             return img, label 
         
-        
+      
+                
