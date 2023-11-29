@@ -1,7 +1,6 @@
+import matplotlib.pyplot as plt 
 import torch 
 import numpy as np 
-import matplotlib.pyplot as plt 
-
 
 def img_show(tensor):
     tensor = img_cvt(tensor)
