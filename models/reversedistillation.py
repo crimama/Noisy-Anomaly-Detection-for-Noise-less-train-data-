@@ -21,7 +21,7 @@ class ReverseDistillation(ReverseDistillationModel):
         
         self._criterion = ReverseDistillationLoss()        
         
-    def _forward(self, images: Tensor):
+    def forward(self, images: Tensor):
         self.encoder.eval()
 
         if self.tiler:
@@ -41,9 +41,9 @@ class ReverseDistillation(ReverseDistillationModel):
         return output 
     
     
-    def forward(self, input_tensor: Tensor):
-        outputs = self._forward(input_tensor)
-        return outputs
+    # def forward(self, input_tensor: Tensor):
+    #     outputs = self._forward(input_tensor)
+    #     return outputs
     
     def criterion(self, outputs: tuple):
         (encoder_features, decoder_features) = outputs
