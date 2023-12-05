@@ -50,7 +50,10 @@ def metric_logging(savedir, use_wandb,
     metrics.update([('epoch', epoch)])
     metrics.update([('lr',round(optimizer.param_groups[0]['lr'],5))])
     metrics.update([('train_' + k, round(v,4)) for k, v in train_metrics.items()])
-    metrics.update([('test_' + k, round(v,4)) for k, v in test_metrics.items()])
+    metrics.update([
+        # ('test_' + k, round(v,4)) for k, v in test_metrics.items()
+        ('test_metrics',test_metrics)
+        ])
     metrics.update([('epoch time',round(epoch_time_m.val,4))])
     
     with open(os.path.join(savedir, 'log.txt'),  'a') as f:
@@ -60,10 +63,8 @@ def metric_logging(savedir, use_wandb,
     
 
 def train(model, dataloader, optimizer, accelerator: Accelerator, log_interval: int) -> dict:
-    '''
-    for imgs, labels in dataloader  -> imgs : [img_i, img_j]
-    loss = criterion(outputs:list)
-    '''   
+    print('Train Start')
+   
     batch_time_m = AverageMeter()
     data_time_m = AverageMeter()
     losses_m = AverageMeter()
@@ -84,6 +85,8 @@ def train(model, dataloader, optimizer, accelerator: Accelerator, log_interval: 
             accelerator.backward(loss)
             optimizer.step()
             
+        # Coreset Update for PatchCore
+
         losses_m.update(loss.item())            
         
         # batch time
@@ -106,6 +109,8 @@ def train(model, dataloader, optimizer, accelerator: Accelerator, log_interval: 
                             ))                
         end = time.time()
         
+    if model.__class__.__name__ in ['PatchCore']:
+        model.fit()
     # logging metrics
     _logger.info('TRAIN: Loss: %.3f' % (losses_m.avg))
     
@@ -113,45 +118,42 @@ def train(model, dataloader, optimizer, accelerator: Accelerator, log_interval: 
     return train_result 
 
 def test(model, dataloader) -> dict:    
+    from utils.metrics import MetricCalculator
     
-    if model.__class__.__name__ == 'PatchCore':
-        model.eval(next(model.parameters()).device) #Patchcore의 경우 embedding들에게 device를 할당해주어야 함 
-    else:
-        model.eval()
-        
-    pixel_auroc = metrics.ROC_AUC()
-    image_auroc = metrics.ROC_AUC()
+    model.eval()
+    img_level = MetricCalculator(metric_list = ['auroc','average_precision','confusion_matrix'])
+    pix_level = MetricCalculator(metric_list = ['auroc','average_precision','confusion_matrix','aupro'])
         
     for idx, (images, labels, gts) in enumerate(dataloader):
         
         # predict
-        with torch.no_grad():
-            if model.__class__.__name__ == 'PatchCore':
-                score, score_map = model.get_score_map(images)
-            else:
+        if model.__class__.__name__ in ['PatchCore']:
+            score, score_map = model.get_score_map(images)
+        else:
+            with torch.no_grad():
                 outputs = model(images)   
                 score_map = model.get_score_map(outputs).detach().cpu()
                 score = score_map.reshape(score_map.shape[0],-1).max(-1)[0]
-        
-        # Stack Scoring for auroc 
-        pixel_auroc.update((score_map.flatten(), gts.flatten()))
-        image_auroc.update((score, labels))
+                
+        # Stack Scoring for metrics 
+        pix_level.update(score_map,gts.type(torch.int))
+        img_level.update(score, labels.type(torch.int))
         
         # Calculate results of evaluation 
         
     if dataloader.dataset.name != 'CIFAR10':
-        p_auroc = pixel_auroc.compute()
-    i_auroc = image_auroc.compute()
+        p_results = pix_level.compute()
+    i_results = img_level.compute()
             
     # logging metrics
     if dataloader.dataset.name != 'CIFAR10':
-        _logger.info('Image AUROC: %.3f%%| Pixel AUROC: %.3f%%' % (i_auroc,p_auroc))
+        _logger.info('Image AUROC: %.3f%%| Pixel AUROC: %.3f%%' % (i_results['auroc'],p_results['auroc']))
     else:
-        _logger.info('Image AUROC: %.3f%%' % (i_auroc))
+        _logger.info('Image AUROC: %.3f%%' % (i_results['auroc']))
         
-    test_result = OrderedDict(image_auroc = i_auroc)
+    test_result = OrderedDict(img_level = i_results)
     if dataloader.dataset.name != 'CIFAR10':
-        test_result.update([('pixel_auroc', round(p_auroc,4))])
+        test_result.update([('pix_level', p_results)])
     
     return test_result 
 
@@ -197,8 +199,8 @@ def fit(
         #     torch.save(model.state_dict(), os.path.join(savedir, f'model_{epoch}.pt')) 
                 
         # checkpoint - save best results and model weights        
-        if best_score < test_metrics['image_auroc']:
-            best_score = test_metrics['image_auroc']
+        if best_score < test_metrics['img_level']['auroc']:
+            best_score = test_metrics['img_level']['auroc']
             print(f" New best score : {best_score} | best epoch : {epoch}")
             torch.save(model.state_dict(), os.path.join(savedir, f'model_best.pt')) 
 

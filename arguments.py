@@ -2,6 +2,7 @@ from omegaconf import OmegaConf
 import argparse
 from datasets import stats
 from easydict import EasyDict
+import os 
 
 
 def convert_type(value):
@@ -90,17 +91,21 @@ def parser(jupyter:bool = False, default_setting:str = None):
                 
     # Update experiment name
     if cfg.MODEL.method == 'PatchCore':
-        cfg.DEFAULT.exp_name = f"{cfg.DEFAULT.exp_name}-coreset_ratio_{cfg.MODEL.params.coreset_sampling_ratio}-anomaly_ratio_{cfg.DATASET.params.anomaly_ratio}" 
+        # cfg.DEFAULT.exp_name = f"{cfg.DEFAULT.exp_name}-coreset_ratio_{cfg.MODEL.params.coreset_sampling_ratio}-anomaly_ratio_{cfg.DATASET.params.anomaly_ratio}" 
+        cfg.DEFAULT.exp_name = f"{cfg.DEFAULT.exp_name}-sampling_ratio_{cfg.MODEL.params.sampling_ratio}-anomaly_ratio_{cfg.DATASET.params.anomaly_ratio}" 
     else:
         cfg.DEFAULT.exp_name = f"{cfg.DEFAULT.exp_name}-anomaly_ratio_{cfg.DATASET.params.anomaly_ratio}" 
-        
-       
+               
     # load dataset statistics
     if cfg.DATASET.dataset_name in ['MVTecAD','MVTecLoco']:
         cfg.DATASET.update(stats.datasets['ImageNet'])
         #cfg.DATASET.update(stats.datasets[cfg.DATASET.class_name])
     else:    
         cfg.DATASET.update(stats.datasets[cfg.DATASET.dataset_name])
+        
     #print(OmegaConf.to_yaml(cfg))
+    
+    # Update Device number 
+    cfg.MODEL.params.device = f"cuda:{os.environ.get('CUDA_VISIBLE_DEVICES', None)}"
     
     return cfg  

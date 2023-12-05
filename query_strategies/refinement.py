@@ -21,7 +21,11 @@ class Refinementer:
         
     
     def init_model(self):
-        return deepcopy(self.model)    
+        if self.model.__class__.__name__ == 'PatchCore':
+            self.model.__init_model__()
+            return self.model
+        else:
+            return deepcopy(self.model)    
     
     def update(self, query_idx: np.ndarray) -> DataLoader:
         '''
@@ -55,8 +59,11 @@ class Refinementer:
             output = model(imgs.to(device))
             loss = model.criterion(output)
             grads = torch.autograd.grad(loss, output[1])
+            # grad_embeddings.append(
+            #     torch.hstack([torch.norm(g.mean(1),dim=(1,2)).unsqueeze(1) for g in grads])
+            # )
             grad_embeddings.append(
-                torch.hstack([torch.norm(g.mean(1),dim=(1,2)).unsqueeze(1) for g in grads])
+                torch.hstack([torch.norm(torch.norm(g,dim=1),dim=(1,2)) for g in grads])
             )
         grad_embeddings = torch.vstack(grad_embeddings)
         return grad_embeddings 
