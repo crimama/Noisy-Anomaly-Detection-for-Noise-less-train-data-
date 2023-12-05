@@ -72,7 +72,7 @@ class MVTecLoco(Dataset):
             gt = self.gt_transform(gt)
             gt = (gt > 0).float()
             
-            return img, label, gt, idx
+            return img, label, gt
         
         else:
             return img, label 
