@@ -142,3 +142,4 @@ anomalib/*
 anomalib/data/__pycache__/__init__.cpython-38.pyc
 *.pyc
 anomalib/data/__pycache__/__init__.cpython-38.pyc
+softpatch/
