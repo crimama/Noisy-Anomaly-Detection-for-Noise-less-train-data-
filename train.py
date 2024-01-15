@@ -17,7 +17,6 @@ from accelerate import Accelerator
 
 from omegaconf import OmegaConf
 
-from ignite.contrib import metrics 
 
 from query_strategies.sampler import SubsetSequentialSampler
 from query_strategies.refinement import Refinementer
@@ -56,11 +55,12 @@ def metric_logging(savedir, use_wandb,
         ])
     metrics.update([('epoch time',round(epoch_time_m.val,4))])
     
-    with open(os.path.join(savedir, 'log.txt'),  'a') as f:
+    with open(os.path.join(savedir, 'log.txt'),  'w') as f:
         f.write(json.dumps(metrics) + "\n")
     if use_wandb:
         wandb.log(metrics, step=step)
     
+
 
 def train(model, dataloader, optimizer, accelerator: Accelerator, log_interval: int) -> dict:
     print('Train Start')
@@ -111,6 +111,7 @@ def train(model, dataloader, optimizer, accelerator: Accelerator, log_interval: 
         
     if model.__class__.__name__ in ['PatchCore']:
         model.fit()
+        
     # logging metrics
     _logger.info('TRAIN: Loss: %.3f' % (losses_m.avg))
     
@@ -118,7 +119,7 @@ def train(model, dataloader, optimizer, accelerator: Accelerator, log_interval: 
     return train_result 
 
 def test(model, dataloader) -> dict:    
-    from utils.metrics import MetricCalculator
+    from utils.metrics import MetricCalculator, loco_auroc
     
     model.eval()
     img_level = MetricCalculator(metric_list = ['auroc','average_precision','confusion_matrix'])
@@ -139,11 +140,15 @@ def test(model, dataloader) -> dict:
         pix_level.update(score_map,gts.type(torch.int))
         img_level.update(score, labels.type(torch.int))
         
-        # Calculate results of evaluation 
-        
+    # Calculate results of evaluation     
     if dataloader.dataset.name != 'CIFAR10':
         p_results = pix_level.compute()
     i_results = img_level.compute()
+    
+    # Calculate results of evaluation per each images        
+    if dataloader.dataset.__class__.__name__ == 'MVTecLoco':
+        p_results['loco_auroc'] = loco_auroc(pix_level,dataloader)
+        i_results['loco_auroc'] = loco_auroc(img_level,dataloader)                
             
     # logging metrics
     if dataloader.dataset.name != 'CIFAR10':
@@ -168,7 +173,7 @@ def fit(
     end = time.time() 
     
     for step,  epoch in enumerate(range(epochs)):
-        _logger.info(f'\nEpoch: {epoch+1}/{epochs}')
+        _logger.info(f'Epoch: {epoch+1}/{epochs}')
         
         train_metrics = train(
             model        = model, 
@@ -201,8 +206,8 @@ def fit(
         # checkpoint - save best results and model weights        
         if best_score < test_metrics['img_level']['auroc']:
             best_score = test_metrics['img_level']['auroc']
-            print(f" New best score : {best_score} | best epoch : {epoch}")
-            torch.save(model.state_dict(), os.path.join(savedir, f'model_best.pt')) 
+            print(f" New best score : {best_score} | best epoch : {epoch}\n")
+            # torch.save(model.state_dict(), os.path.join(savedir, f'model_best.pt')) 
 
 
 def export_query_result(query_store:list, img_dirs):
@@ -284,7 +289,7 @@ def refinement_run(
         model = refinement.init_model()
             
         
-        _logger.info(f'\nRound : [{r}/{nb_round}]')     
+        _logger.info(f'Round : [{r}/{nb_round}]')     
         
         # optimizer
         optimizer = __import__('torch.optim', fromlist='optim').__dict__[opt_name](model.parameters(), lr=lr, **opt_params)
@@ -321,6 +326,6 @@ def refinement_run(
             seed         = seed 
         )     
         
-        torch.save(model.state_dict(),os.path.join(savedir, f'model_round{r}_last.pt'))                   
+        #torch.save(model.state_dict(),os.path.join(savedir, f'model_round{r}_last.pt'))                   
         wandb.finish()                            
 

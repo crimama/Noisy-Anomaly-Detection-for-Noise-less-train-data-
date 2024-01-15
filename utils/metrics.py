@@ -1,3 +1,4 @@
+import pandas as pd 
 import numpy as np 
 from skimage import measure
 from scipy.ndimage.measurements import label
@@ -6,9 +7,26 @@ from torchmetrics import AUROC
 from statistics import mean
 import torch 
 
+def loco_auroc(metric, dataloader):
+    results = {} 
+    metric.preds = np.concatenate(metric.preds)
+    metric.targets = np.concatenate(metric.targets)
+    
+    anomaly_types = pd.Series(dataloader.dataset.img_dirs).apply(lambda x : x.split('/')[-2])
+    
+    for a_type in ['structural_anomalies','logical_anomalies']:
+        cond = np.where(anomaly_types.apply(lambda x : x in ['good',a_type]))[0]
+        
+        preds =  metric.preds[cond]
+        target = metric.targets[cond]
+        
+        auroc = roc_auc_score(target.reshape(-1),preds.reshape(-1))
+        results[a_type] = auroc 
+    return results 
+
 class MetricCalculator:
     '''
-    metric = MetricCalculator(metric_list=['auroc])
+    metric = MetricCalculator(metric_list=['auroc
     
     metric.update(preds:torch.Tensor, target:torch.Tensor)
     '''
@@ -62,10 +80,9 @@ class MetricCalculator:
         )
         self.targets.append(
             self._detach(y_trues)
-        )
+        )        
         
-        
-    def compute(self):        
+    def compute(self) -> dict:
         y_preds = np.concatenate(self.preds) # (N,W,H)
         y_trues = np.concatenate(self.targets) # (N,W,H)
         

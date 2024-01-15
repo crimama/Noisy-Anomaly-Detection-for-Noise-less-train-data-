@@ -14,24 +14,44 @@ def train_augmentation(img_size: int, mean: tuple, std: tuple, aug_info: list = 
         transforms.ToTensor(),
         transforms.Normalize(mean, std),
     ])
-
+    
     transform = add_augmentation(transform=transform, img_size=img_size, aug_info=aug_info)
+    
+    if 'PatchCore' in aug_info:
+        transform = transforms.Compose([transforms.Resize(256),
+            transforms.CenterCrop(img_size),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=mean, std=std)
+            ])
 
     return transform
 
-def test_augmentation(img_size: int, mean: tuple, std: tuple):
+def test_augmentation(img_size: int, mean: tuple, std: tuple, aug_info = None):
     transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Resize((img_size, img_size)),
         transforms.Normalize(mean, std),
     ])
+    
+    if 'PatchCore' in aug_info:
+        transform = transforms.Compose([transforms.Resize(256),
+            transforms.CenterCrop(img_size),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=mean, std=std)
+            ])    
     return transform
 
-def gt_augmentation(img_size: int):
+def gt_augmentation(img_size: int, aug_info:list = None):
     transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Resize((img_size, img_size))
     ])
+    
+    if 'PatchCore' in aug_info:
+        transform = transforms.Compose([transforms.Resize(256),
+            transforms.CenterCrop(img_size),
+            transforms.ToTensor(),
+            ])
     return transform 
 
 
@@ -44,7 +64,9 @@ def add_augmentation(transform: transforms.Compose, img_size: int, aug_info: lis
         'RandomVerticalFlip': transforms.RandomVerticalFlip(p=0.3),
         'RandomColorJitter' : transforms.RandomApply([get_color_jitter()], p=0.8),
         'GaussianBlur' : GaussianBlur(kernel_size=int(0.1*img_size)),
-        'Resize': transforms.Resize((img_size, img_size))
+        'Resize': transforms.Resize((img_size, img_size)),
+        'ResizeCrop': ResizeCrop(img_size),
+        'PatchCore': None
     }
     # insert augmentations
     if aug_info != None:    
@@ -58,6 +80,20 @@ def add_augmentation(transform: transforms.Compose, img_size: int, aug_info: lis
 def get_color_jitter(s=1):
     color_jitter = transforms.ColorJitter(0.8 * s, 0.8 * s, 0.8 * s, 0.2 * s)
     return color_jitter
+
+class ResizeCrop:
+    def __init__(self, img_size):
+        self.resize = 256 if img_size == 224 else 280 
+        self.crop_size = img_size 
+        self.transform = transforms.Compose([
+            transforms.Resize(self.resize),
+            transforms.CenterCrop(self.crop_size)
+            ]
+        )
+    def __call__(self, img):
+        return self.transform(img)
+        
+    
 
 class GaussianBlur(object):
     """blur a single image on CPU"""

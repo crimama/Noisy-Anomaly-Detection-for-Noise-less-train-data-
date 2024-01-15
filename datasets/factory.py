@@ -37,15 +37,15 @@ def load_MVTecLoco(dataset_name:str, datadir:str, class_name:str, img_size:int, 
                 df           = df,
                 train_mode   = 'train',
                 transform    = train_augmentation(img_size = img_size, mean = mean, std = std, aug_info = aug_info),
-                gt_transform = gt_augmentation(img_size = img_size),
+                gt_transform = gt_augmentation(img_size = img_size, aug_info = aug_info),
                 gt           = True 
             )
 
     testset = MVTecLoco(
                 df           = df,
                 train_mode   = 'test',
-                transform    = test_augmentation(img_size = img_size, mean = mean, std = std),
-                gt_transform = gt_augmentation(img_size = img_size),
+                transform    = test_augmentation(img_size = img_size, mean = mean, std = std, aug_info = aug_info),
+                gt_transform = gt_augmentation(img_size = img_size, aug_info = aug_info),
                 gt           = True 
             )
     
@@ -64,15 +64,15 @@ def load_MVTecAD(dataset_name:str, datadir:str, class_name:str, img_size:int, me
                 df           = df,
                 train_mode   = 'train',
                 transform    = train_augmentation(img_size = img_size, mean = mean, std = std, aug_info = aug_info),
-                gt_transform = gt_augmentation(img_size = img_size),
+                gt_transform = gt_augmentation(img_size = img_size, aug_info = aug_info),
                 gt           = True 
             )
 
     testset = MVTecAD(
                 df           = df,
                 train_mode   = 'test',
-                transform    = test_augmentation(img_size = img_size, mean = mean, std = std),
-                gt_transform = gt_augmentation(img_size = img_size),
+                transform    = test_augmentation(img_size = img_size, mean = mean, std = std, aug_info = aug_info),
+                gt_transform = gt_augmentation(img_size = img_size, aug_info = aug_info),
                 gt           = True 
             )
     

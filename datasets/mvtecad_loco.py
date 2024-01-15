@@ -3,6 +3,7 @@ import os
 import numpy as np 
 import pandas as pd 
 import cv2 
+from PIL import Image 
 import torch 
 from torch.utils.data import Dataset
 
@@ -50,27 +51,32 @@ class MVTecLoco(Dataset):
             img_dir[-1] = img_dir[-1].split('.')[0]
             img_dir.append('000.png')
             img_dir = '/'.join(img_dir)
-            image = cv2.imread(img_dir)
+            self.gt_img = img_dir
+            # image = cv2.imread(img_dir)
+            gt = Image.open(img_dir)
+            gt = self.gt_transform(gt)
         else:
-            image = np.zeros_like(torch.permute(img,dims=(1,2,0))).astype(np.uint8)
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-        return image 
+            # image = np.zeros_like(torch.permute(img,dims=(1,2,0))).astype(np.uint8)
+            # image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            gt = torch.zeros([1, *img.size()[1:]])
+        return gt 
         
     def __len__(self):
         return len(self.img_dirs)
     
     def __getitem__(self,idx):
         img_dir = self.img_dirs[idx]
-        img = cv2.imread(img_dir)
+        # img = cv2.imread(img_dir)
+        img = Image.open(img_dir).convert('RGB')     
         img = self.transform(img)
         img = img.type(torch.float32)
         label = self.labels[idx]
         
         if self.gt:
             gt = self._get_ground_truth(img_dir,img)
-            gt = self.gt_transform(gt)
+            # gt = self.gt_transform(gt)
             gt = (gt > 0).float()
+            #gt = gt.type(torch.int64)
             
             return img, label, gt
         

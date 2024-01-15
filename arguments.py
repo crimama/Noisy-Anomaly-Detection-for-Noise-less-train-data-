@@ -105,7 +105,15 @@ def parser(jupyter:bool = False, default_setting:str = None):
         
     #print(OmegaConf.to_yaml(cfg))
     
-    # Update Device number 
-    cfg.MODEL.params.device = f"cuda:{os.environ.get('CUDA_VISIBLE_DEVICES', None)}"
-    
+    # Update Device number     
+    if os.environ.get('CUDA_VISIBLE_DEVICES', None) is None:
+        cfg.MODEL.params.device = f"cuda:{os.environ.get('CUDA_VISIBLE_DEVICES', None)}"
+    else:
+        cfg.MODEL.params.device = 'cuda:0'
+        
+    # Update thresholding of sampling 
+    if cfg.MODEL.params.weight_method == 'identity':
+        cfg.MODEL.params.threshold = 1 
+    else:
+        cfg.MODEL.params.threshold = 0.15 
     return cfg  

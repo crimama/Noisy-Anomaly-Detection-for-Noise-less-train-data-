@@ -9,7 +9,7 @@ import os
 
 class PatchCore(SoftPatch):
     def __init__(self, backbone:str, layers_to_extract_from:list,
-                 input_shape:tuple, 
+                 input_shape:tuple, anomaly_score_num_nn:int,
                  sampler_name:str, sampling_ratio:float,
                  faiss_on_gpu:bool, faiss_num_workers:int,
                  lof_k:int, threshold:float,
@@ -41,7 +41,8 @@ class PatchCore(SoftPatch):
             lof_k                  = lof_k,
             threshold              = threshold,
             weight_method          = weight_method,
-            soft_weight_flag       = with_soft_weight            
+            soft_weight_flag       = with_soft_weight,
+            anomaly_score_num_nn   = anomaly_score_num_nn
         )        
         self.data = [] 
         

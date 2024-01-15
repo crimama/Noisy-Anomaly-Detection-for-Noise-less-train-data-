@@ -70,9 +70,10 @@ class PatchcoreModel(DynamicBufferModule, nn.Module):
         batch_size, _, width, height = embedding.shape
         embedding = self.reshape_embedding(embedding)
 
-        if self.training:
+        if self.training: #.train()
             output = embedding
-        else:
+            
+        else: #.eval()
             # apply nearest neighbor search
             patch_scores, locations = self.nearest_neighbors(embedding=embedding, n_neighbors=1)
             # reshape to batch dimension
