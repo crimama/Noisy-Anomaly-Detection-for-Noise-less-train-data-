@@ -1,4 +1,4 @@
-# UAADF : Noisy-Anomaly-Detection-for-Noise-less-train-data 
+# NALD : Noisy-Anomaly-Detection-for-Noise-less-train-data 
 - Anomaly Detection Framework for Noisy unsupervised learning 
 - Now ongoing 
 
