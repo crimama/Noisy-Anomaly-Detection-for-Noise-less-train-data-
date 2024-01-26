@@ -55,40 +55,27 @@ def str_to_int(value):
     except NameError:
         return False, value
     
-def get_parser():
-    parse = argparse.ArgumentParser(description='UAADF')
-    parse.add_argument('--default_setting', type=str, default=None, help='default config file')
-    parse.add_argument(
-        "opts",
-        help="Modify config options using the command-line",
-        default=None,
-        nargs=argparse.REMAINDER,
-    )
+def cli_parser():
+    args = OmegaConf.from_cli()
+    default_cfg = OmegaConf.load(args.default_setting)
+    model_cfg = OmegaConf.load(args.model_setting)
+    cfg = OmegaConf.merge(default_cfg,model_cfg)
+    cfg = OmegaConf.merge(cfg,args)
 
-    args = parse.parse_args()
-    return args 
+    return cfg 
 
-def parser(jupyter:bool = False, default_setting:str = None):
+def jupyter_parser(default_setting:str = None, model_setting:str = None):
+    default = OmegaConf.load(default_setting)
+    model = OmegaConf.load(model_setting)
+    return OmegaConf.merge(default, model)
+
+def parser(jupyter:bool = False, default_setting:str = None, model_setting:str = None):
     
     if jupyter:
-        args = default_setting 
+        cfg = jupyter_parser(default_setting, model_setting)
     else:
-        args = get_parser()
-        default_setting = args.default_setting 
-        
-    # load default config
-    cfg = OmegaConf.load(default_setting)
+        cfg = cli_parser()
     
-    
-    # update cfg
-    if not jupyter:
-
-        for k, v in zip(args.opts[0::2], args.opts[1::2]):
-            if k == 'DEFAULT.exp_name':
-                cfg.DEFAULT.exp_name = f'{cfg.DEFAULT.exp_name}-{v}'
-            else:
-                OmegaConf.update(cfg, k, convert_type(v), merge=True)
-                
     # Update experiment name
     if cfg.MODEL.method == 'PatchCore':
         # cfg.DEFAULT.exp_name = f"{cfg.DEFAULT.exp_name}-coreset_ratio_{cfg.MODEL.params.coreset_sampling_ratio}-anomaly_ratio_{cfg.DATASET.params.anomaly_ratio}" 
@@ -101,19 +88,27 @@ def parser(jupyter:bool = False, default_setting:str = None):
         cfg.DATASET.update(stats.datasets['ImageNet'])
         #cfg.DATASET.update(stats.datasets[cfg.DATASET.class_name])
     else:    
-        cfg.DATASET.update(stats.datasets[cfg.DATASET.dataset_name])
-        
-    #print(OmegaConf.to_yaml(cfg))
+        cfg.DATASET.update(stats.datasets[cfg.DATASET.dataset_name])    
     
-    # Update Device number     
+    # update config for each method 
+    cfg = eval(f"{cfg.MODEL.method.lower()}_arguments")(cfg)    
+    
+    return cfg  
+
+def patchcore_arguments(cfg):
+    # device for Patchcore 
     if os.environ.get('CUDA_VISIBLE_DEVICES', None) is None:
         cfg.MODEL.params.device = f"cuda:{os.environ.get('CUDA_VISIBLE_DEVICES', None)}"
     else:
-        cfg.MODEL.params.device = 'cuda:0'
-        
-    # Update thresholding of sampling 
+        cfg.MODEL.params.device = 'cuda:0'    
+
+    # threshold for each sampling method 
     if cfg.MODEL.params.weight_method == 'identity':
         cfg.MODEL.params.threshold = 1 
     else:
         cfg.MODEL.params.threshold = 0.15 
-    return cfg  
+        
+    return cfg 
+
+def reversedistillation_arguments(cfg):
+    return cfg 
