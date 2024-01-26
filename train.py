@@ -18,8 +18,8 @@ from accelerate import Accelerator
 from omegaconf import OmegaConf
 
 
-from query_strategies.sampler import SubsetSequentialSampler
-from query_strategies.refinement import Refinementer
+from refinement.sampler import SubsetSequentialSampler
+from refinement.refinement import Refinementer
 
 _logger = logging.getLogger('train')
 

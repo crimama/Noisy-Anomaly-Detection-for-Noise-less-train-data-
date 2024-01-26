@@ -1,6 +1,6 @@
 import torch 
 from torch import Tensor, nn
-from anomalib.models.fastflow.torch_model import FastflowModel
+from .anomalib.models.fastflow.torch_model import FastflowModel
 
 from timm.models.vision_transformer import VisionTransformer
 from timm.models.cait import Cait

@@ -1,6 +1,6 @@
-from anomalib.models.reverse_distillation.torch_model import ReverseDistillationModel
-from anomalib.models.reverse_distillation.loss import ReverseDistillationLoss
-from anomalib.models.reverse_distillation.anomaly_map import AnomalyMapGenerationMode
+from .anomalib.models.reverse_distillation.torch_model import ReverseDistillationModel
+from .anomalib.models.reverse_distillation.loss import ReverseDistillationLoss
+from .anomalib.models.reverse_distillation.anomaly_map import AnomalyMapGenerationMode
 from torch import Tensor, nn 
 
 class ReverseDistillation(ReverseDistillationModel):
