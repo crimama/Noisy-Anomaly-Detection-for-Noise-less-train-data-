@@ -56,8 +56,11 @@ done
 
 
 ## Baseline
-- [ ] 체크박스 해제
-
+- [x] Patchcore
+- [x] SoftPatch
+- [x] ReverseDistillation
+- [x] STPM
+- [ ] Padim
 
 
 
@@ -66,3 +69,4 @@ done
 [result.ipynb](result.ipynb)
 
 # Feedback 
+
