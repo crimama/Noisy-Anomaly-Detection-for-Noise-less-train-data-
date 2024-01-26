@@ -1,4 +1,3 @@
-from .factory import create_model
 from .stpm import STPM 
 from .patchcore import PatchCore
 from .fastflow import FastFlow 
