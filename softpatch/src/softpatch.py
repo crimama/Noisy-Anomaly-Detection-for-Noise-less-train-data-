@@ -206,7 +206,7 @@ class SoftPatch(torch.nn.Module):
             patch_weight = patch_weight.reshape(-1)
             threshold = torch.quantile(patch_weight, 1 - self.threshold)
             sampling_weight = torch.where(patch_weight > threshold, 0, 1) 
-            
+            self.sampling_weight = sampling_weight.detach().cpu().numpy()
         ############ SoftPatch ############
             
         ############ patch wise coreset sampling ###########
@@ -234,8 +234,9 @@ class SoftPatch(torch.nn.Module):
         ############ patch wise coreset sampling ###########
         
         ############ coreset sampling ###########
-        self.featuresampler.set_sampling_weight(sampling_weight) # <- subsampling data which has outlier score under thresholding
+        #!self.featuresampler.set_sampling_weight(sampling_weight) # <- subsampling data which has outlier score under thresholding
         sample_features, sample_indices = self.featuresampler.run(features) # greedy search
+        self.sample_indices = sample_indices
         features = sample_features
 
         self.patch_weight = patch_weight.clamp(min=0)
