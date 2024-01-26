@@ -62,11 +62,3 @@ done
 - [x] STPM
 - [ ] Padim
 
-
-
-# Result 
-
-[result.ipynb](result.ipynb)
-
-# Feedback 
-
