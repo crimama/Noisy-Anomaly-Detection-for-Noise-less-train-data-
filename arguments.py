@@ -79,7 +79,7 @@ def parser(jupyter:bool = False, default_setting:str = None, model_setting:str =
     # Update experiment name
     if cfg.MODEL.method == 'PatchCore':
         # cfg.DEFAULT.exp_name = f"{cfg.DEFAULT.exp_name}-coreset_ratio_{cfg.MODEL.params.coreset_sampling_ratio}-anomaly_ratio_{cfg.DATASET.params.anomaly_ratio}" 
-        cfg.DEFAULT.exp_name = f"{cfg.DEFAULT.exp_name}-sampling_ratio_{cfg.MODEL.params.sampling_ratio}-anomaly_ratio_{cfg.DATASET.params.anomaly_ratio}" 
+        cfg.DEFAULT.exp_name = f"{cfg.DEFAULT.exp_name}-{cfg.MODEL.params.weight_method}-sampling_ratio_{cfg.MODEL.params.sampling_ratio}-anomaly_ratio_{cfg.DATASET.params.anomaly_ratio}" 
     else:
         cfg.DEFAULT.exp_name = f"{cfg.DEFAULT.exp_name}-anomaly_ratio_{cfg.DATASET.params.anomaly_ratio}" 
                
