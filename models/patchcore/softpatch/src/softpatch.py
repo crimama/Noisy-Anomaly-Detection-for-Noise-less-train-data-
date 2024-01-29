@@ -231,7 +231,7 @@ class SoftPatch(torch.nn.Module):
         ############ patch wise coreset sampling ###########
         
         ############ coreset sampling ###########
-        #!self.featuresampler.set_sampling_weight(sampling_weight) # <- subsampling data which has outlier score under thresholding
+        self.featuresampler.set_sampling_weight(sampling_weight) # <- subsampling data which has outlier score under thresholding
         sample_features, sample_indices = self.featuresampler.run(features) # greedy search
         self.sample_indices = sample_indices
         features = sample_features
